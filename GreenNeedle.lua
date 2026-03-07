@@ -1,0 +1,65 @@
+-- This Source Code Form is subject to the terms of the Mozilla Public
+-- License, v. 2.0. If a copy of the MPL was not distributed with this
+-- file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+GreenNeedle = {}
+
+-- Default settings (used when no settings file exists yet)
+GreenNeedle.SETTINGS = {
+	force_lua_search = false,
+	keybinds = {
+		autoReroll = "a",
+	},
+	autoreroll = {
+		searchTag = "",
+		searchTagID = 1,
+		searchPack = {},
+		searchPackID = 1,
+		searchVoucher = "",
+		searchVoucherID = 1,
+		searchVoucher2 = "",
+		searchVoucher2ID = 1,
+		searchLegendary = "",
+		searchLegendaryID = 1,
+		searchTagCard1 = "",
+		searchTagCard1ID = 1,
+		searchTagCard2 = "",
+		searchTagCard2ID = 1,
+		searchPackCard1 = "",
+		searchPackCard1ID = 1,
+		searchPackCard2 = "",
+		searchPackCard2ID = 1,
+		searchWraithJoker = "",
+		searchWraithJokerID = 1,
+		searchWraithEdition = "",
+		searchWraithEditionID = 1,
+		seedsPerFrame = 100000,
+		seedsPerFrameID = 3,
+	},
+}
+
+function initGreenNeedle()
+	local lovely = require("lovely")
+	local nativefs = require("nativefs")
+	assert(load(nativefs.read(lovely.mod_dir .. "/GreenNeedle/GreenNeedle_main.lua")))()
+	assert(load(nativefs.read(lovely.mod_dir .. "/GreenNeedle/GreenNeedle_UI.lua")))()
+	assert(load(nativefs.read(lovely.mod_dir .. "/GreenNeedle/GreenNeedle_keyhandler.lua")))()
+	assert(load(nativefs.read(lovely.mod_dir .. "/GreenNeedle/GreenNeedle_search.lua")))()
+
+	-- Load saved settings (overwrite defaults)
+	if nativefs.getInfo(lovely.mod_dir .. "/GreenNeedle/settings.lua") then
+		local saved = STR_UNPACK(nativefs.read(lovely.mod_dir .. "/GreenNeedle/settings.lua"))
+		if saved then
+			-- Merge saved into defaults so new keys get their defaults
+			for k, v in pairs(saved) do
+				if type(v) == "table" and type(GreenNeedle.SETTINGS[k]) == "table" then
+					for k2, v2 in pairs(v) do
+						GreenNeedle.SETTINGS[k][k2] = v2
+					end
+				else
+					GreenNeedle.SETTINGS[k] = v
+				end
+			end
+		end
+	end
+end

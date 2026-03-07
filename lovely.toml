@@ -1,0 +1,54 @@
+[manifest]
+version = "1.0.0"
+dump_lua = true
+priority = 0
+
+[[patches]] # Include nativefs module
+[patches.module]
+source = 'nativefs.lua'
+before = 'main.lua'
+name = 'nativefs'
+
+[[patches]] # Patch GreenNeedle loader to main
+[patches.copy]
+target = "main.lua"
+position = "append"
+sources = ["GreenNeedle.lua"]
+
+[[patches]] # Initialize GreenNeedle after profile is loaded
+[patches.pattern]
+target = "game.lua"
+pattern = "self:load_profile(G.SETTINGS.profile or 1)"
+position = "after"
+payload = "initGreenNeedle()"
+match_indent = true
+overwrite = false
+
+[[patches]] # Inject key press handler
+[patches.pattern]
+target = "engine/controller.lua"
+pattern = "if self.text_input_hook then"
+position = "before"
+payload = "GreenNeedle.key_press_update(key)"
+match_indent = true
+overwrite = false
+
+[[patches]] # Inject key release handler
+[patches.pattern]
+target = "engine/controller.lua"
+pattern = "if key == 'tab' and G.debug_tools then"
+position = "before"
+payload = "GreenNeedle.key_release_update(key)"
+match_indent = true
+overwrite = false
+
+[[patches]] # Update loop
+[patches.pattern]
+target = "game.lua"
+pattern = "G.FRAMES.MOVE = G.FRAMES.MOVE + 1"
+position = "before"
+payload = '''
+GreenNeedle.update(dt)
+'''
+match_indent = true
+overwrite = false

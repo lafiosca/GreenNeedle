@@ -1,0 +1,7 @@
+# Compiled CLI tools (rebuild from .c sources)
+native/bench
+native/seed_search
+native/seed_search_st
+
+# User settings (created at runtime)
+settings.lua
