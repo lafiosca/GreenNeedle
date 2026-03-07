@@ -4,6 +4,14 @@ A [Balatro](https://www.playbalatro.com/) mod for searching game seeds that matc
 
 Requires the [Lovely](https://github.com/ethangreen-dev/lovely-injector) mod loader.
 
+*Configure search filters in the Green Needle settings tab:*
+
+![Settings tab](screenshots/settings.png)
+
+*Live search with progress counter and estimated total:*
+
+![Searching for seeds](screenshots/search.png)
+
 ## Features
 
 - Search for seeds matching any combination of:

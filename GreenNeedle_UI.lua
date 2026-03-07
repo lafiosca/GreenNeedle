@@ -456,6 +456,7 @@ function create_tabs(args)
 						opt_callback = "gn_change_search_legendary",
 						current_option = s.searchLegendaryID or 1,
 					}),
+					{n=G.UIT.R, config={align="cm", minh=0.3}, nodes={}},
 					create_option_cycle({
 						label = "Seeds per Frame",
 						scale = 0.8,
