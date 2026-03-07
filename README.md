@@ -52,7 +52,7 @@ The mod works on all platforms via the pure-Lua search fallback. The pre-built n
 
 The native search library provides dramatically faster searching. Pre-built for macOS (universal binary: Apple Silicon arm64 + Intel x86_64).
 
-The C source (`native/greenneedle.c`) is portable C11 with no platform-specific dependencies — it should compile on Windows and Linux as well. Pre-built binaries for those platforms aren't provided yet; contributions welcome.
+The C source (`native/greenneedle.c`) is portable C11 with no platform-specific dependencies — it should compile on Windows and Linux as well.
 
 To rebuild on macOS:
 
