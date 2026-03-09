@@ -360,6 +360,14 @@ function create_tabs(args)
 					)
 				end
 
+				-- Check if Judgement is selected as a tag card (for judgement joker selector)
+				local has_judgement_tag_card = false
+				if tag_ct == "tarot" then
+					if (s.searchTagCard1 or "") == "c_judgement" or (s.searchTagCard2 or "") == "c_judgement" then
+						has_judgement_tag_card = true
+					end
+				end
+
 				-- Column 1: Skip Tag + tag pack card selectors
 				local col1_nodes = {
 					create_option_cycle({
@@ -373,6 +381,26 @@ function create_tabs(args)
 				}
 				for _, node in ipairs(tag_card_nodes) do
 					col1_nodes[#col1_nodes + 1] = node
+				end
+				if has_judgement_tag_card then
+					local jud_page = s.searchJudgementPage or 1
+					local jud_options = GreenNeedle.build_judgement_selector(jud_page)
+					col1_nodes[#col1_nodes + 1] = create_option_cycle({
+						label = "Judgement Joker",
+						scale = 0.8,
+						w = 4,
+						options = jud_options,
+						opt_callback = "gn_change_search_judgement_joker",
+						current_option = s.searchJudgementJokerID or 2,
+					})
+					col1_nodes[#col1_nodes + 1] = create_option_cycle({
+						label = "Judgement Edition",
+						scale = 0.8,
+						w = 4,
+						options = searchWraithEditionKeys,
+						opt_callback = "gn_change_search_judgement_edition",
+						current_option = s.searchJudgementEditionID or 1,
+					})
 				end
 
 				-- Check if Wraith is selected as a pack card (for wraith joker selector)

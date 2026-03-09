@@ -251,9 +251,147 @@ static const char *LEGENDARY_POOL[] = {
 };
 #define LEGENDARY_POOL_SIZE 5
 
+/* Common jokers in order (rarity=1, sorted by order field).
+ * Used for predicting Judgement's joker creation. */
+static const char *COMMON_JOKER_POOL[] = {
+    "j_joker",            /* order 1   */
+    "j_greedy_joker",     /* order 2   */
+    "j_lusty_joker",      /* order 3   */
+    "j_wrathful_joker",   /* order 4   */
+    "j_gluttenous_joker", /* order 5   */
+    "j_jolly",            /* order 6   */
+    "j_zany",             /* order 7   */
+    "j_mad",              /* order 8   */
+    "j_crazy",            /* order 9   */
+    "j_droll",            /* order 10  */
+    "j_sly",              /* order 11  */
+    "j_wily",             /* order 12  */
+    "j_clever",           /* order 13  */
+    "j_devious",          /* order 14  */
+    "j_crafty",           /* order 15  */
+    "j_half",             /* order 16  */
+    "j_credit_card",      /* order 20  */
+    "j_banner",           /* order 22  */
+    "j_mystic_summit",    /* order 23  */
+    "j_8_ball",           /* order 26  */
+    "j_misprint",         /* order 27  */
+    "j_raised_fist",      /* order 29  */
+    "j_chaos",            /* order 30  */
+    "j_scary_face",       /* order 33  */
+    "j_abstract",         /* order 34  */
+    "j_delayed_grat",     /* order 35  */
+    "j_gros_michel",      /* order 38  */
+    "j_even_steven",      /* order 39  */
+    "j_odd_todd",         /* order 40  */
+    "j_scholar",          /* order 41  */
+    "j_business",         /* order 42  */
+    "j_supernova",        /* order 43  */
+    "j_ride_the_bus",     /* order 44  */
+    "j_egg",              /* order 46  */
+    "j_runner",           /* order 49  */
+    "j_ice_cream",        /* order 50  */
+    "j_splash",           /* order 52  */
+    "j_blue_joker",       /* order 53  */
+    "j_faceless",         /* order 57  */
+    "j_green_joker",      /* order 58  */
+    "j_superposition",    /* order 59  */
+    "j_todo_list",        /* order 60  */
+    NULL,                 /* order 61: j_cavendish -- UNAVAILABLE (yes_pool_flag='gros_michel_extinct') */
+    "j_red_card",         /* order 63  */
+    "j_square",           /* order 65  */
+    "j_riff_raff",        /* order 67  */
+    "j_photograph",       /* order 78  */
+    "j_reserved_parking", /* order 82  */
+    "j_mail",             /* order 83  */
+    "j_hallucination",    /* order 85  */
+    "j_fortune_teller",   /* order 86  */
+    "j_juggler",          /* order 87  */
+    "j_drunkard",         /* order 88  */
+    "j_golden",           /* order 90  */
+    "j_popcorn",          /* order 97  */
+    "j_walkie_talkie",    /* order 101 */
+    "j_smiley",           /* order 104 */
+    "j_ticket",           /* order 106 */
+    "j_swashbuckler",     /* order 110 */
+    "j_hanging_chad",     /* order 115 */
+    "j_shoot_the_moon",   /* order 140 */
+};
+#define COMMON_JOKER_POOL_SIZE 61
+
+/* Uncommon jokers in order (rarity=2, sorted by order field).
+ * Used for predicting Judgement's joker creation. */
+static const char *UNCOMMON_JOKER_POOL[] = {
+    "j_stencil",          /* order 17  */
+    "j_four_fingers",     /* order 18  */
+    "j_mime",             /* order 19  */
+    "j_ceremonial",       /* order 21  */
+    "j_marble",           /* order 24  */
+    "j_loyalty_card",     /* order 25  */
+    "j_dusk",             /* order 28  */
+    "j_fibonacci",        /* order 31  */
+    "j_steel_joker",      /* order 32  */
+    "j_hack",             /* order 36  */
+    "j_pareidolia",       /* order 37  */
+    "j_space",            /* order 45  */
+    "j_burglar",          /* order 47  */
+    "j_blackboard",       /* order 48  */
+    "j_sixth_sense",      /* order 54  */
+    "j_constellation",    /* order 55  */
+    "j_hiker",            /* order 56  */
+    "j_card_sharp",       /* order 62  */
+    "j_madness",          /* order 64  */
+    "j_seance",           /* order 66  */
+    "j_vampire",          /* order 68  */
+    "j_shortcut",         /* order 69  */
+    "j_hologram",         /* order 70  */
+    "j_cloud_9",          /* order 73  */
+    "j_rocket",           /* order 74  */
+    "j_midas_mask",       /* order 76  */
+    "j_luchador",         /* order 77  */
+    "j_gift",             /* order 79  */
+    "j_turtle_bean",      /* order 80  */
+    "j_erosion",          /* order 81  */
+    "j_to_the_moon",      /* order 84  */
+    "j_stone",            /* order 89  */
+    "j_lucky_cat",        /* order 91  */
+    "j_bull",             /* order 93  */
+    "j_diet_cola",        /* order 94  */
+    "j_trading",          /* order 95  */
+    "j_flash",            /* order 96  */
+    "j_trousers",         /* order 98  */
+    "j_ramen",            /* order 100 */
+    "j_selzer",           /* order 102 */
+    "j_castle",           /* order 103 */
+    "j_mr_bones",         /* order 107 */
+    "j_acrobat",          /* order 108 */
+    "j_sock_and_buskin",  /* order 109 */
+    "j_troubadour",       /* order 111 */
+    "j_certificate",      /* order 112 */
+    "j_smeared",          /* order 113 */
+    "j_throwback",        /* order 114 */
+    "j_rough_gem",        /* order 116 */
+    "j_bloodstone",       /* order 117 */
+    "j_arrowhead",        /* order 118 */
+    "j_onyx_agate",       /* order 119 */
+    "j_glass",            /* order 120 */
+    "j_ring_master",      /* order 121 */
+    "j_flower_pot",       /* order 122 */
+    "j_merry_andy",       /* order 125 */
+    "j_oops",             /* order 126 */
+    "j_idol",             /* order 127 */
+    "j_seeing_double",    /* order 128 */
+    "j_matador",          /* order 129 */
+    "j_satellite",        /* order 139 */
+    "j_cartomancer",      /* order 142 */
+    "j_astronomer",       /* order 143 */
+    "j_bootstraps",       /* order 145 */
+};
+#define UNCOMMON_JOKER_POOL_SIZE 64
+
 /* Rare jokers in order (rarity=3, sorted by order field).
- * Used for predicting Wraith's rare joker creation.
- * Pool key: "Joker3wra" + ante */
+ * Used for predicting Wraith's and Judgement's joker creation.
+ * Pool key for Wraith: "Joker3wra" + ante
+ * Pool key for Judgement: "Joker3jud" + ante */
 static const char *RARE_JOKER_POOL[] = {
     "j_dna",              /* order 51  */
     "j_vagabond",         /* order 71  */
@@ -415,7 +553,11 @@ static const char *predict_voucher_h(const char *seed, int slen, int ante,
     int pool[VOUCHER_DEFS_SIZE];
     build_voucher_pool(used_mask, pool);
 
-    double pseed = gn_pseudoseed_advance_h("Voucher", 7, seed, slen, ante - 1, hs);
+    /* Game uses pseudoseed("Voucher" .. ante) — the ante is part of the key,
+     * not an advance count. First call to a key does 1 advance internally. */
+    char pool_key[32];
+    int pklen = snprintf(pool_key, sizeof(pool_key), "Voucher%d", ante);
+    double pseed = gn_pseudoseed_h(pool_key, pklen, seed, slen, hs);
 
     LRandom rng = randomseed(pseed);
     uint64_t idx = l_randint(&rng, 1, (uint64_t)VOUCHER_DEFS_SIZE);
@@ -551,6 +693,71 @@ static const char *predict_wraith_edition_h(const char *seed, int slen, int ante
     return "";
 }
 
+/* Predict which joker Judgement creates for a given seed.
+ * Judgement calls create_card('Joker', ..., nil, nil, ..., 'jud'):
+ *   1. Rarity determined by pseudorandom('rarity' .. ante .. 'jud')
+ *      >0.95 → Rare(3), >0.7 → Uncommon(2), else Common(1)
+ *   2. Joker picked from rarity pool with key "Joker{R}jud{ante}"
+ * Assumes all jokers unlocked (no availability mask). */
+static const char *predict_judgement_joker_h(const char *seed, int slen, int ante, double hs) {
+    if (hs < 0) hs = pseudohash(seed, slen);
+
+    /* Step 1: determine rarity via pseudorandom('rarity' .. ante .. 'jud') */
+    char rarity_key[32];
+    int rklen = snprintf(rarity_key, sizeof(rarity_key), "rarity%djud", ante);
+    double rarity_pseed = gn_pseudoseed_h(rarity_key, rklen, seed, slen, hs);
+    LRandom rarity_rng = randomseed(rarity_pseed);
+    double rarity_roll = l_random(&rarity_rng);
+
+    const char **pool;
+    int pool_size;
+    int rarity;
+    if (rarity_roll > 0.95) {
+        pool = RARE_JOKER_POOL; pool_size = RARE_JOKER_POOL_SIZE; rarity = 3;
+    } else if (rarity_roll > 0.7) {
+        pool = UNCOMMON_JOKER_POOL; pool_size = UNCOMMON_JOKER_POOL_SIZE; rarity = 2;
+    } else {
+        pool = COMMON_JOKER_POOL; pool_size = COMMON_JOKER_POOL_SIZE; rarity = 1;
+    }
+
+    /* Step 2: pick joker from rarity pool */
+    char pool_key[32];
+    int pklen = snprintf(pool_key, sizeof(pool_key), "Joker%djud%d", rarity, ante);
+    double pseed = gn_pseudoseed_h(pool_key, pklen, seed, slen, hs);
+    LRandom rng = randomseed(pseed);
+    uint64_t idx = l_randint(&rng, 1, (uint64_t)pool_size);
+
+    /* Handle UNAVAILABLE slots (e.g. Cavendish) with resampling */
+    if (pool[idx - 1] == NULL) {
+        int resample = 1;
+        while (pool[idx - 1] == NULL && resample < 100) {
+            resample++;
+            char reskey[64];
+            int rklen = snprintf(reskey, sizeof(reskey), "Joker%djud%d_resample%d", rarity, ante, resample);
+            double rpseed = gn_pseudoseed_h(reskey, rklen, seed, slen, hs);
+            rng = randomseed(rpseed);
+            idx = l_randint(&rng, 1, (uint64_t)pool_size);
+        }
+    }
+    return pool[idx - 1] ? pool[idx - 1] : "j_joker";
+}
+
+/* Predict the edition of the joker Judgement creates.
+ * Uses pseudoseed key "edijud" + ante with poll_edition base rates. */
+static const char *predict_judgement_edition_h(const char *seed, int slen, int ante, double hs) {
+    if (hs < 0) hs = pseudohash(seed, slen);
+    char key[32];
+    int klen = snprintf(key, sizeof(key), "edijud%d", ante);
+    double pseed = gn_pseudoseed_h(key, klen, seed, slen, hs);
+    LRandom rng = randomseed(pseed);
+    double poll = l_random(&rng);
+    if (poll > 0.997) return "e_negative";
+    if (poll > 1.0 - 0.006) return "e_polychrome";
+    if (poll > 1.0 - 0.02) return "e_holographic";
+    if (poll > 1.0 - 0.04) return "e_foil";
+    return "";
+}
+
 /* Search check for tarot cards: returns true if target_card appears in any slot (early exit).
  * Same logic as predict_tarot_cards but with hashed_seed cache and early termination. */
 static bool check_tarot_card_h(const char *seed, int slen, const char *key_append, int ante,
@@ -585,10 +792,10 @@ static bool check_tarot_card_h(const char *seed, int slen, const char *key_appen
 static bool predict_spectral_inner(const char *seed, int slen, const char *key_append, int ante,
                                     int pack_size, const char *extra_excluded, double hs,
                                     const char **out_cards, const char *target_card) {
-    char tarot_soul_key[64];
-    int tarot_soul_klen = snprintf(tarot_soul_key, sizeof(tarot_soul_key), "soul_Tarot%d", ante);
-    char spectral_soul_key[64];
-    int spectral_soul_klen = snprintf(spectral_soul_key, sizeof(spectral_soul_key), "soul_Spectral%d", ante);
+    /* The game uses pseudorandom('soul_Spectral' .. ante) for BOTH the c_soul
+     * and c_black_hole checks (same key, advancing state twice per slot). */
+    char soul_key[64];
+    int soul_klen = snprintf(soul_key, sizeof(soul_key), "soul_Spectral%d", ante);
 
     char card_key[64];
     int card_klen = snprintf(card_key, sizeof(card_key), "Spectral%s%d", key_append, ante);
@@ -607,21 +814,30 @@ static bool predict_spectral_inner(const char *seed, int slen, const char *key_a
     }
 
     int card_advance = 0;
+    int soul_advance = 0;
     for (int slot = 1; slot <= pack_size; slot++) {
-        /* c_soul check */
-        double soul_pseed = gn_pseudoseed_advance_h(tarot_soul_key, tarot_soul_klen, seed, slen, slot, hs);
+        /* Both checks use the same key ('soul_Spectral' .. ante) and always
+         * execute, advancing state twice per slot regardless of outcome.
+         * If both fire, c_black_hole wins (overwrites c_soul). */
+        soul_advance++;
+        double soul_pseed = gn_pseudoseed_advance_h(soul_key, soul_klen, seed, slen, soul_advance, hs);
         LRandom soul_rng = randomseed(soul_pseed);
-        if (l_random(&soul_rng) > 0.997) {
-            if (out_cards) out_cards[slot - 1] = "c_soul";
-            if (target_card && strcmp("c_soul", target_card) == 0) return true;
-            continue;
-        }
-        /* c_black_hole check */
-        double bh_pseed = gn_pseudoseed_advance_h(spectral_soul_key, spectral_soul_klen, seed, slen, slot, hs);
+        bool is_soul = (l_random(&soul_rng) > 0.997);
+
+        soul_advance++;
+        double bh_pseed = gn_pseudoseed_advance_h(soul_key, soul_klen, seed, slen, soul_advance, hs);
         LRandom bh_rng = randomseed(bh_pseed);
-        if (l_random(&bh_rng) > 0.997) {
+        bool is_bh = (l_random(&bh_rng) > 0.997);
+
+        if (is_bh) {
+            /* c_black_hole overwrites c_soul if both fire */
             if (out_cards) out_cards[slot - 1] = "c_black_hole";
             if (target_card && strcmp("c_black_hole", target_card) == 0) return true;
+            continue;
+        }
+        if (is_soul) {
+            if (out_cards) out_cards[slot - 1] = "c_soul";
+            if (target_card && strcmp("c_soul", target_card) == 0) return true;
             continue;
         }
         /* Normal spectral card */
@@ -713,11 +929,14 @@ typedef struct {
     const char    *wraith_joker;
     uint32_t       rare_joker_mask;
     const char    *wraith_edition;
+    const char    *judgement_joker;
+    const char    *judgement_edition;
     bool           want_tag, want_pack, want_voucher;
     bool           want_legendary, want_spectral;
     bool           want_tarot_card, want_tarot_card2;
     bool           want_spectral2, want_voucher2;
     bool           want_wraith_joker, want_wraith_edition;
+    bool           want_judgement_joker, want_judgement_edition;
     /* Output */
     char           result[SEED_LEN + 1];
     /* Shared: early exit flag (set by any thread that finds a match) */
@@ -785,6 +1004,14 @@ static void *search_worker(void *arg) {
             if (strcmp(predict_wraith_edition_h(seed, slen, 1, hs), w->wraith_edition) != 0)
                 ok = false;
         }
+        if (ok && w->want_judgement_joker) {
+            if (strcmp(predict_judgement_joker_h(seed, slen, 1, hs), w->judgement_joker) != 0)
+                ok = false;
+        }
+        if (ok && w->want_judgement_edition) {
+            if (strcmp(predict_judgement_edition_h(seed, slen, 1, hs), w->judgement_edition) != 0)
+                ok = false;
+        }
         if (ok && w->want_voucher2) {
             /* Ante 2 voucher: the ante 1 voucher was purchased, so mark it used */
             uint32_t used = 0;
@@ -824,7 +1051,9 @@ const char *greenneedle_search(
     const char *wraith_joker,
     uint32_t    rare_joker_mask,
     const char *wraith_edition,
-    int         spectral_pack_size
+    int         spectral_pack_size,
+    const char *judgement_joker,
+    const char *judgement_edition
 ) {
     static char result[16];
     result[0] = '\0';
@@ -856,6 +1085,8 @@ const char *greenneedle_search(
     bool want_spectral2    = spectral_card2 && spectral_card2[0];
     bool want_wraith_joker = wraith_joker && wraith_joker[0];
     bool want_wraith_edition = wraith_edition && wraith_edition[0];
+    bool want_judgement_joker = judgement_joker && judgement_joker[0];
+    bool want_judgement_edition = judgement_edition && judgement_edition[0];
 
     /* Decode start_seed to a uint64 */
     uint64_t offset = 0;
@@ -917,6 +1148,10 @@ const char *greenneedle_search(
         w->wraith_edition  = wraith_edition;
         w->want_wraith_joker = want_wraith_joker;
         w->want_wraith_edition = want_wraith_edition;
+        w->judgement_joker = judgement_joker;
+        w->judgement_edition = judgement_edition;
+        w->want_judgement_joker = want_judgement_joker;
+        w->want_judgement_edition = want_judgement_edition;
         w->result[0]       = '\0';
         w->found           = &found_flag;
         cursor += chunk;
