@@ -58,6 +58,50 @@ end
 -- Settings change callbacks
 -- ---------------------------------------------------------------------------
 
+-- Find the index of a value in a key list, returning 1 ("Any") if not found
+local function find_key_index(keys, value)
+	if not value or value == "" then return 1 end
+	for i, k in ipairs(keys) do
+		if k == value then return i end
+	end
+	return 1
+end
+
+-- Reverse-lookup: find the display label for a card key value
+local function find_card_label(lookup_table, card_key)
+	if not card_key or card_key == "" then return "Any" end
+	for label, key in pairs(lookup_table) do
+		if key == card_key then return label end
+	end
+	return "Any"
+end
+
+-- Fix card 2 index after card 1 changes (excluded list shifts)
+local function fix_card2_index(card2_key, lookup_table, base_keys, exclude_label)
+	local card2_label = find_card_label(lookup_table, card2_key)
+	local pos = 0
+	for _, label in ipairs(base_keys) do
+		if label ~= exclude_label then
+			pos = pos + 1
+			if label == card2_label then return pos end
+		end
+	end
+	return 1
+end
+
+-- Check if The Soul is selected in any card slot; if not, reset Legendary to "Any"
+local function reset_legendary_if_no_soul()
+	local s = GreenNeedle.SETTINGS.autoreroll
+	local has_soul = (s.searchTagCard1 or "") == "c_soul"
+		or (s.searchTagCard2 or "") == "c_soul"
+		or (s.searchPackCard1 or "") == "c_soul"
+		or (s.searchPackCard2 or "") == "c_soul"
+	if not has_soul then
+		s.searchLegendary = ""
+		s.searchLegendaryID = 1
+	end
+end
+
 G.FUNCS.gn_change_search_tag = function(x)
 	GreenNeedle.SETTINGS.autoreroll.searchTagID = x.to_key
 	GreenNeedle.SETTINGS.autoreroll.searchTag = GreenNeedle.SearchTagList[x.to_val]
@@ -71,6 +115,7 @@ G.FUNCS.gn_change_search_tag = function(x)
 	GreenNeedle.SETTINGS.autoreroll.searchJudgementPage = 1
 	GreenNeedle.SETTINGS.autoreroll.searchJudgementEdition = ""
 	GreenNeedle.SETTINGS.autoreroll.searchJudgementEditionID = 1
+	reset_legendary_if_no_soul()
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
 	GreenNeedle.refresh_settings_tab()
 end
@@ -87,6 +132,7 @@ G.FUNCS.gn_change_search_pack = function(x)
 	GreenNeedle.SETTINGS.autoreroll.searchWraithJokerID = 1
 	GreenNeedle.SETTINGS.autoreroll.searchWraithEdition = ""
 	GreenNeedle.SETTINGS.autoreroll.searchWraithEditionID = 1
+	reset_legendary_if_no_soul()
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
 	GreenNeedle.refresh_settings_tab()
 end
@@ -120,93 +166,136 @@ G.FUNCS.gn_change_search_voucher2 = function(x)
 	local _, v2_lookup = GreenNeedle.build_voucher2_options(v1_label)
 	GreenNeedle.SETTINGS.autoreroll.searchVoucher2 = v2_lookup[x.to_val] or ""
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
-	GreenNeedle.refresh_settings_tab()
+	GreenNeedle.update_estimate_text()
 end
 
 G.FUNCS.gn_change_search_legendary = function(x)
 	GreenNeedle.SETTINGS.autoreroll.searchLegendaryID = x.to_key
 	GreenNeedle.SETTINGS.autoreroll.searchLegendary = GreenNeedle.SearchLegendaryList[x.to_val]
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
-	GreenNeedle.refresh_settings_tab()
+	GreenNeedle.update_estimate_text()
 end
 
 G.FUNCS.gn_change_search_tag_card1 = function(x)
-	GreenNeedle.SETTINGS.autoreroll.searchTagCard1ID = x.to_key
-	GreenNeedle.SETTINGS.autoreroll.searchTagCard1 = GreenNeedle.SearchTarotCardList[x.to_val]
-	-- Reset card 2 when card 1 changes (excluded list shifts)
-	GreenNeedle.SETTINGS.autoreroll.searchTagCard2 = ""
-	GreenNeedle.SETTINGS.autoreroll.searchTagCard2ID = 1
-	-- Reset Judgement joker if Judgement is no longer selected
-	if GreenNeedle.SETTINGS.autoreroll.searchTagCard1 ~= "c_judgement" and
-	   (GreenNeedle.SETTINGS.autoreroll.searchTagCard2 or "") ~= "c_judgement" then
-		GreenNeedle.SETTINGS.autoreroll.searchJudgementJoker = ""
-		GreenNeedle.SETTINGS.autoreroll.searchJudgementJokerID = 2
-		GreenNeedle.SETTINGS.autoreroll.searchJudgementPage = 1
-		GreenNeedle.SETTINGS.autoreroll.searchJudgementEdition = ""
-		GreenNeedle.SETTINGS.autoreroll.searchJudgementEditionID = 1
+	local s = GreenNeedle.SETTINGS.autoreroll
+	local old_has_judgement = (s.searchTagCard1 or "") == "c_judgement" or (s.searchTagCard2 or "") == "c_judgement"
+	local old_has_soul = (s.searchTagCard1 or "") == "c_soul" or (s.searchTagCard2 or "") == "c_soul"
+		or (s.searchPackCard1 or "") == "c_soul" or (s.searchPackCard2 or "") == "c_soul"
+	s.searchTagCard1ID = x.to_key
+	s.searchTagCard1 = GreenNeedle.SearchTarotCardList[x.to_val]
+	-- If card 2 collides with new card 1, reset it; otherwise preserve
+	if s.searchTagCard1 == s.searchTagCard2 and s.searchTagCard1 ~= "" then
+		s.searchTagCard2 = ""
+		s.searchTagCard2ID = 1
+	else
+		s.searchTagCard2ID = fix_card2_index(s.searchTagCard2, GreenNeedle.SearchTarotCardList, GreenNeedle.searchTarotCardKeys, x.to_val)
 	end
+	-- Reset Judgement joker if Judgement is no longer selected
+	local new_has_judgement = s.searchTagCard1 == "c_judgement" or (s.searchTagCard2 or "") == "c_judgement"
+	if not new_has_judgement then
+		s.searchJudgementJoker = ""
+		s.searchJudgementJokerID = 2
+		s.searchJudgementPage = 1
+		s.searchJudgementEdition = ""
+		s.searchJudgementEditionID = 1
+	end
+	reset_legendary_if_no_soul()
+	local new_has_soul = (s.searchTagCard1 or "") == "c_soul" or (s.searchTagCard2 or "") == "c_soul"
+		or (s.searchPackCard1 or "") == "c_soul" or (s.searchPackCard2 or "") == "c_soul"
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
-	GreenNeedle.refresh_settings_tab()
+	if old_has_judgement ~= new_has_judgement or old_has_soul ~= new_has_soul then
+		GreenNeedle.refresh_settings_tab()
+	else
+		GreenNeedle.update_estimate_text()
+	end
 end
 
 G.FUNCS.gn_change_search_tag_card2 = function(x)
-	GreenNeedle.SETTINGS.autoreroll.searchTagCard2ID = x.to_key
-	GreenNeedle.SETTINGS.autoreroll.searchTagCard2 = GreenNeedle.SearchTarotCardList[x.to_val]
+	local s = GreenNeedle.SETTINGS.autoreroll
+	local old_has_judgement = (s.searchTagCard1 or "") == "c_judgement" or (s.searchTagCard2 or "") == "c_judgement"
+	local old_has_soul = (s.searchTagCard1 or "") == "c_soul" or (s.searchTagCard2 or "") == "c_soul"
+		or (s.searchPackCard1 or "") == "c_soul" or (s.searchPackCard2 or "") == "c_soul"
+	s.searchTagCard2ID = x.to_key
+	s.searchTagCard2 = GreenNeedle.SearchTarotCardList[x.to_val]
 	-- Reset Judgement joker if Judgement is no longer selected in either slot
-	if (GreenNeedle.SETTINGS.autoreroll.searchTagCard1 or "") ~= "c_judgement" and
-	   GreenNeedle.SETTINGS.autoreroll.searchTagCard2 ~= "c_judgement" then
-		GreenNeedle.SETTINGS.autoreroll.searchJudgementJoker = ""
-		GreenNeedle.SETTINGS.autoreroll.searchJudgementJokerID = 2
-		GreenNeedle.SETTINGS.autoreroll.searchJudgementPage = 1
-		GreenNeedle.SETTINGS.autoreroll.searchJudgementEdition = ""
-		GreenNeedle.SETTINGS.autoreroll.searchJudgementEditionID = 1
+	local new_has_judgement = (s.searchTagCard1 or "") == "c_judgement" or s.searchTagCard2 == "c_judgement"
+	if not new_has_judgement then
+		s.searchJudgementJoker = ""
+		s.searchJudgementJokerID = 2
+		s.searchJudgementPage = 1
+		s.searchJudgementEdition = ""
+		s.searchJudgementEditionID = 1
 	end
+	reset_legendary_if_no_soul()
+	local new_has_soul = (s.searchTagCard1 or "") == "c_soul" or (s.searchTagCard2 or "") == "c_soul"
+		or (s.searchPackCard1 or "") == "c_soul" or (s.searchPackCard2 or "") == "c_soul"
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
-	GreenNeedle.refresh_settings_tab()
+	if old_has_judgement ~= new_has_judgement or old_has_soul ~= new_has_soul then
+		GreenNeedle.refresh_settings_tab()
+	else
+		GreenNeedle.update_estimate_text()
+	end
 end
 
 G.FUNCS.gn_change_search_pack_card1 = function(x)
-	GreenNeedle.SETTINGS.autoreroll.searchPackCard1ID = x.to_key
+	local s = GreenNeedle.SETTINGS.autoreroll
+	local old_has_wraith = (s.searchPackCard1 or "") == "c_wraith" or (s.searchPackCard2 or "") == "c_wraith"
+	local old_has_soul = (s.searchTagCard1 or "") == "c_soul" or (s.searchTagCard2 or "") == "c_soul"
+		or (s.searchPackCard1 or "") == "c_soul" or (s.searchPackCard2 or "") == "c_soul"
+	s.searchPackCard1ID = x.to_key
 	local pack_type = GreenNeedle.get_pack_card_type()
 	if pack_type == "spectral" then
-		GreenNeedle.SETTINGS.autoreroll.searchPackCard1 = GreenNeedle.SearchSpectralCardList[x.to_val]
+		s.searchPackCard1 = GreenNeedle.SearchSpectralCardList[x.to_val]
 	else
-		GreenNeedle.SETTINGS.autoreroll.searchPackCard1 = GreenNeedle.SearchTarotCardList[x.to_val]
+		s.searchPackCard1 = GreenNeedle.SearchTarotCardList[x.to_val]
 	end
-	-- Reset card 2 when card 1 changes (excluded list shifts)
-	local s = GreenNeedle.SETTINGS.autoreroll
-	s.searchPackCard2 = ""
-	s.searchPackCard2ID = 1
+	-- If card 2 collides with new card 1, reset it; otherwise preserve
+	if s.searchPackCard1 == s.searchPackCard2 and s.searchPackCard1 ~= "" then
+		s.searchPackCard2 = ""
+		s.searchPackCard2ID = 1
+	else
+		local lookup = pack_type == "spectral" and GreenNeedle.SearchSpectralCardList or GreenNeedle.SearchTarotCardList
+		local keys = pack_type == "spectral" and GreenNeedle.searchSpectralCardKeys or GreenNeedle.searchTarotCardKeys
+		s.searchPackCard2ID = fix_card2_index(s.searchPackCard2, lookup, keys, x.to_val)
+	end
 	-- Only reset wraith if wraith is no longer selected in either card slot
-	if s.searchPackCard1 ~= "c_wraith" then
+	local new_has_wraith = s.searchPackCard1 == "c_wraith" or (s.searchPackCard2 or "") == "c_wraith"
+	if not new_has_wraith then
 		s.searchWraithJoker = ""
 		s.searchWraithJokerID = 1
 		s.searchWraithEdition = ""
 		s.searchWraithEditionID = 1
 	end
+	reset_legendary_if_no_soul()
+	local new_has_soul = (s.searchTagCard1 or "") == "c_soul" or (s.searchTagCard2 or "") == "c_soul"
+		or (s.searchPackCard1 or "") == "c_soul" or (s.searchPackCard2 or "") == "c_soul"
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
-	GreenNeedle.refresh_settings_tab()
+	if old_has_wraith ~= new_has_wraith or old_has_soul ~= new_has_soul then
+		GreenNeedle.refresh_settings_tab()
+	else
+		GreenNeedle.update_estimate_text()
+	end
 end
 
 G.FUNCS.gn_change_search_wraith_joker = function(x)
 	GreenNeedle.SETTINGS.autoreroll.searchWraithJokerID = x.to_key
 	GreenNeedle.SETTINGS.autoreroll.searchWraithJoker = GreenNeedle.SearchRareJokerList[x.to_val]
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
-	GreenNeedle.refresh_settings_tab()
+	GreenNeedle.update_estimate_text()
 end
 
 G.FUNCS.gn_change_search_wraith_edition = function(x)
 	GreenNeedle.SETTINGS.autoreroll.searchWraithEditionID = x.to_key
 	GreenNeedle.SETTINGS.autoreroll.searchWraithEdition = GreenNeedle.SearchWraithEditionList[x.to_val]
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
-	GreenNeedle.refresh_settings_tab()
+	GreenNeedle.update_estimate_text()
 end
 
 G.FUNCS.gn_change_search_judgement_edition = function(x)
 	GreenNeedle.SETTINGS.autoreroll.searchJudgementEditionID = x.to_key
 	GreenNeedle.SETTINGS.autoreroll.searchJudgementEdition = GreenNeedle.SearchWraithEditionList[x.to_val]
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
-	GreenNeedle.refresh_settings_tab()
+	GreenNeedle.update_estimate_text()
 end
 
 G.FUNCS.gn_change_search_judgement_joker = function(x)
@@ -245,27 +334,38 @@ G.FUNCS.gn_change_search_judgement_joker = function(x)
 	s.searchJudgementJokerID = x.to_key
 	s.searchJudgementJoker = lookup[x.to_val] or ""
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
-	GreenNeedle.refresh_settings_tab()
+	GreenNeedle.update_estimate_text()
 end
 
 G.FUNCS.gn_change_search_pack_card2 = function(x)
-	GreenNeedle.SETTINGS.autoreroll.searchPackCard2ID = x.to_key
+	local s = GreenNeedle.SETTINGS.autoreroll
+	local old_has_wraith = (s.searchPackCard1 or "") == "c_wraith" or (s.searchPackCard2 or "") == "c_wraith"
+	local old_has_soul = (s.searchTagCard1 or "") == "c_soul" or (s.searchTagCard2 or "") == "c_soul"
+		or (s.searchPackCard1 or "") == "c_soul" or (s.searchPackCard2 or "") == "c_soul"
+	s.searchPackCard2ID = x.to_key
 	local pack_type = GreenNeedle.get_pack_card_type()
 	if pack_type == "spectral" then
-		GreenNeedle.SETTINGS.autoreroll.searchPackCard2 = GreenNeedle.SearchSpectralCardList[x.to_val]
+		s.searchPackCard2 = GreenNeedle.SearchSpectralCardList[x.to_val]
 	else
-		GreenNeedle.SETTINGS.autoreroll.searchPackCard2 = GreenNeedle.SearchTarotCardList[x.to_val]
+		s.searchPackCard2 = GreenNeedle.SearchTarotCardList[x.to_val]
 	end
 	-- Only reset wraith if wraith is no longer selected in either card slot
-	local s = GreenNeedle.SETTINGS.autoreroll
-	if (s.searchPackCard1 or "") ~= "c_wraith" and s.searchPackCard2 ~= "c_wraith" then
+	local new_has_wraith = (s.searchPackCard1 or "") == "c_wraith" or s.searchPackCard2 == "c_wraith"
+	if not new_has_wraith then
 		s.searchWraithJoker = ""
 		s.searchWraithJokerID = 1
 		s.searchWraithEdition = ""
 		s.searchWraithEditionID = 1
 	end
+	reset_legendary_if_no_soul()
+	local new_has_soul = (s.searchTagCard1 or "") == "c_soul" or (s.searchTagCard2 or "") == "c_soul"
+		or (s.searchPackCard1 or "") == "c_soul" or (s.searchPackCard2 or "") == "c_soul"
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
-	GreenNeedle.refresh_settings_tab()
+	if old_has_wraith ~= new_has_wraith or old_has_soul ~= new_has_soul then
+		GreenNeedle.refresh_settings_tab()
+	else
+		GreenNeedle.update_estimate_text()
+	end
 end
 
 -- Helper: determine the number of card slots for the currently selected shop pack variant
@@ -666,7 +766,11 @@ function GreenNeedle.build_judgement_joker_list()
 			end
 		end
 	end
-	table.sort(list, function(a, b) return a.name:lower() < b.name:lower() end)
+	table.sort(list, function(a, b)
+		local an = a.name:lower():gsub("^the ", "")
+		local bn = b.name:lower():gsub("^the ", "")
+		return an < bn
+	end)
 	return list
 end
 
@@ -783,7 +887,9 @@ local EDITION_PROBS = {
 
 -- Format a number with B/M/K suffixes for display
 function GreenNeedle.format_seed_count(n)
-	if n >= 1000000000 then
+	if n >= 1000000000000 then
+		return string.format("%.1fT", n / 1000000000000)
+	elseif n >= 1000000000 then
 		return string.format("%.1fB", n / 1000000000)
 	elseif n >= 1000000 then
 		return string.format("%.1fM", n / 1000000)

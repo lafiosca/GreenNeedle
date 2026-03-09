@@ -56,14 +56,14 @@ function GreenNeedle.update(dt)
 				maxw = 8,
 				text = {{ref_table = GreenNeedle.AUTOREROLL.displayText, ref_value = "value"}},
 				align = 'cm',
-				offset = {x = 0, y = -3.5},
+				offset = {x = 0, y = -4.7},
 				major = major,
 			})
 			GreenNeedle.AUTOREROLL.timerText = GreenNeedle.attention_text({
 				scale = 0.7,
 				text = {{ref_table = GreenNeedle.AUTOREROLL.timerDisplayText, ref_value = "value"}},
 				align = 'cm',
-				offset = {x = 0, y = -4.7},
+				offset = {x = 0, y = -3.5},
 				major = major,
 				colour = {0.8, 0.8, 0.8, 1},
 				emboss = 0.05,

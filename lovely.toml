@@ -42,6 +42,22 @@ payload = "GreenNeedle.key_release_update(key)"
 match_indent = true
 overwrite = false
 
+[[patches]] # Create Green Needle button on main menu
+[patches.pattern]
+target = "functions/UI_definitions.lua"
+pattern = "local settings = UIBox_button({button = 'settings', label = {localize('b_settings')}, minw = 5, focus_args = {snap_to = true}})"
+position = "after"
+payload = "local greenneedle_settings = UIBox_button({button = 'greenneedle_config', label = {'Green Needle'}, colour = darken(G.C.GREEN, 0.25), shadow = true, text_colour = G.C.WHITE, minw = 5, focus_args = {snap_to = true}})"
+match_indent = true
+
+[[patches]] # Add Green Needle button to main options menu
+[patches.pattern]
+target = "functions/UI_definitions.lua"
+pattern = "local t = create_UIBox_generic_options({ contents = {"
+position = "after"
+payload = "greenneedle_settings,"
+match_indent = true
+
 [[patches]] # Update loop
 [patches.pattern]
 target = "game.lua"

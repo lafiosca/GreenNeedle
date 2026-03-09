@@ -160,7 +160,7 @@ GreenNeedle.SearchTarotCardList = {
 	["The Chariot"]      = "c_chariot",
 	["Justice"]          = "c_justice",
 	["The Hermit"]       = "c_hermit",
-	["The Wheel of Fortune"] = "c_wheel_of_fortune",
+	["Wheel of Fortune"] = "c_wheel_of_fortune",
 	["Strength"]         = "c_strength",
 	["The Hanged Man"]   = "c_hanged_man",
 	["Death"]            = "c_death",
@@ -220,10 +220,12 @@ local searchPackKeys = {"Any", "Normal Arcana", "Jumbo Arcana", "Mega Arcana", "
 GreenNeedle.searchVoucherKeys = {"Any", "Overstock", "Clearance Sale", "Hone", "Reroll Surplus", "Crystal Ball", "Telescope", "Grabber", "Wasteful", "Tarot Merchant", "Planet Merchant", "Seed Money", "Blank", "Magic Trick", "Hieroglyph", "Director's Cut", "Paint Brush"}
 local searchVoucherKeys = GreenNeedle.searchVoucherKeys
 local searchLegendaryKeys = {"Any", "Canio", "Triboulet", "Yorick", "Chicot", "Perkeo"}
-local searchSpectralCardKeys = {"Any", "Familiar", "Grim", "Incantation", "Talisman", "Aura", "Wraith", "Sigil", "Ouija", "Ectoplasm", "Immolate", "Ankh", "Deja Vu", "Hex", "Trance", "Medium", "Cryptid", "The Soul", "Black Hole"}
-local searchTarotCardKeys = {"Any", "The Fool", "The Magician", "The High Priestess", "The Empress", "The Emperor", "The Hierophant", "The Lovers", "The Chariot", "Justice", "The Hermit", "The Wheel of Fortune", "Strength", "The Hanged Man", "Death", "Temperance", "The Devil", "The Tower", "The Star", "The Moon", "The Sun", "Judgement", "The World", "The Soul"}
-local searchRareJokerKeys = {"Any", "DNA", "Vagabond", "Baron", "Obelisk", "Baseball Card", "Ancient Joker", "Campfire", "Blueprint", "Wee Joker", "Hit the Road", "The Duo", "The Trio", "The Family", "The Order", "The Tribe", "Stuntman", "Invisible Joker", "Brainstorm", "Driver's License", "Burnt Joker"}
-local searchWraithEditionKeys = {"Any", "Negative", "Polychrome", "Holographic", "Foil"}
+GreenNeedle.searchSpectralCardKeys = {"Any", "Ankh", "Aura", "Black Hole", "Cryptid", "Deja Vu", "Ectoplasm", "Familiar", "Grim", "Hex", "Immolate", "Incantation", "Medium", "Ouija", "Sigil", "Talisman", "The Soul", "Trance", "Wraith"}
+local searchSpectralCardKeys = GreenNeedle.searchSpectralCardKeys
+GreenNeedle.searchTarotCardKeys = {"Any", "The Chariot", "Death", "The Devil", "The Emperor", "The Empress", "The Fool", "The Hanged Man", "The Hermit", "The High Priestess", "Judgement", "Justice", "The Lovers", "The Magician", "The Moon", "The Soul", "The Star", "Strength", "The Sun", "Temperance", "The Tower", "Wheel of Fortune", "The World"}
+local searchTarotCardKeys = GreenNeedle.searchTarotCardKeys
+local searchRareJokerKeys = {"Any", "Ancient Joker", "Baron", "Baseball Card", "Blueprint", "Brainstorm", "Burnt Joker", "Campfire", "DNA", "Driver's License", "The Duo", "The Family", "Hit the Road", "Invisible Joker", "Obelisk", "The Order", "Stuntman", "The Tribe", "The Trio", "Vagabond", "Wee Joker"}
+local searchWraithEditionKeys = {"Any", "Foil", "Holographic", "Polychrome", "Negative"}
 local seedsPerFrame = {"1K", "10K", "100K", "500K", "1M"}
 
 -- Build a card key list excluding a specific key (for card 2 exclusion)
@@ -312,21 +314,21 @@ end
 
 function GreenNeedle.refresh_settings_tab()
 	if G.OVERLAY_MENU then
-		local tab_but = G.OVERLAY_MENU:get_UIE_by_ID('tab_but_Green Needle')
-		if tab_but then
+		local container = G.OVERLAY_MENU:get_UIE_by_ID('gn_content')
+		if container then
 			GreenNeedle._suppress_pop_in = true
-			G.FUNCS.change_tab(tab_but)
+			container.config.object:remove()
+			container.config.object = UIBox{
+				definition = GreenNeedle.settings_panel(),
+				config = {offset = {x = 0, y = 0}, parent = container},
+			}
 			GreenNeedle._suppress_pop_in = false
 		end
 	end
 end
 
-local ct = create_tabs
-function create_tabs(args)
-	if args and args.tab_h == 7.05 then
-		args.tabs[#args.tabs + 1] = {
-			label = "Green Needle",
-			tab_definition_function = function()
+-- Green Needle settings panel definition (shared by settings tab and main menu button)
+function GreenNeedle.settings_panel()
 				local s = GreenNeedle.SETTINGS.autoreroll
 
 				-- Dynamic card selectors for tag
@@ -457,6 +459,12 @@ function create_tabs(args)
 				-- Compute search estimate for display
 				local est = GreenNeedle.estimate_search_seeds()
 
+				-- Check if The Soul is selected in any card slot
+				local has_soul_selected = (s.searchTagCard1 or "") == "c_soul"
+					or (s.searchTagCard2 or "") == "c_soul"
+					or (s.searchPackCard1 or "") == "c_soul"
+					or (s.searchPackCard2 or "") == "c_soul"
+
 				-- Column 3: Vouchers, Legendary, Seeds per Frame, native status
 				local col3_nodes = {
 					create_option_cycle({
@@ -475,44 +483,73 @@ function create_tabs(args)
 						opt_callback = "gn_change_search_voucher2",
 						current_option = s.searchVoucher2ID or 1,
 					}),
-					{n=G.UIT.R, config={align="cm", minh=0.3}, nodes={}},
-					create_option_cycle({
+					}
+				col3_nodes[#col3_nodes + 1] = {n=G.UIT.R, config={align="cm", minh=0.3}, nodes={}}
+				if has_soul_selected then
+					col3_nodes[#col3_nodes + 1] = create_option_cycle({
 						label = "Legendary",
 						scale = 0.8,
 						w = 4,
 						options = searchLegendaryKeys,
 						opt_callback = "gn_change_search_legendary",
 						current_option = s.searchLegendaryID or 1,
-					}),
-					{n=G.UIT.R, config={align="cm", minh=0.3}, nodes={}},
-					create_option_cycle({
+					})
+					col3_nodes[#col3_nodes + 1] = {n=G.UIT.R, config={align="cm", minh=0.53}, nodes={}}
+				else
+					col3_nodes[#col3_nodes + 1] = {n=G.UIT.R, config={align="cm", minh=2}, nodes={}}
+				end
+				col3_nodes[#col3_nodes + 1] = create_option_cycle({
 						label = "Seeds per Frame",
 						scale = 0.8,
 						w = 4,
 						options = seedsPerFrame,
 						opt_callback = "gn_change_seeds_per_frame",
 						current_option = s.seedsPerFrameID or 1,
-					}),
-					{n=G.UIT.R, config={align="cm"}, nodes={
+					})
+				col3_nodes[#col3_nodes + 1] = {n=G.UIT.R, config={align="cm"}, nodes={
 						{n=G.UIT.T, config={
 							text = GreenNeedle.native and "Native search: enabled" or "Native search: unavailable (Lua fallback)",
 							scale = 0.3,
 							colour = GreenNeedle.native and G.C.GREEN or G.C.RED,
 						}},
-					}},
-					{n=G.UIT.R, config={align="cm"}, nodes={
+					}}
+				GreenNeedle._estimateDisplayText = GreenNeedle._estimateDisplayText or {}
+				local max_seeds = 2251875390625 -- 35^8
+				if est > max_seeds then
+					GreenNeedle._estimateDisplayText.value = "Est. ~" .. GreenNeedle.format_seed_count(est) .. " seeds (unlikely)"
+				elseif est > 0 then
+					GreenNeedle._estimateDisplayText.value = "Est. ~" .. GreenNeedle.format_seed_count(est) .. " seeds"
+				else
+					GreenNeedle._estimateDisplayText.value = ""
+				end
+				local est_colour
+				if est <= 0 then
+					est_colour = G.C.WHITE
+				elseif est >= 1000000000000 then
+					est_colour = G.C.RED
+				elseif est <= 1000000000 then
+					-- White to yellow: green stays 1, blue goes 1→0
+					local t = est / 1000000000
+					est_colour = {1, 1, 1 - t, 1}
+				else
+					-- Yellow to red: green goes 1→0
+					local t = (est - 1000000000) / (1000000000000 - 1000000000)
+					est_colour = {1, 1 - t, 0, 1}
+				end
+				col3_nodes[#col3_nodes + 1] = {n=G.UIT.R, config={align="cm"}, nodes={
 						{n=G.UIT.T, config={
-							id = "gn_estimate_text",
-							text = est > 0 and ("Est. ~" .. GreenNeedle.format_seed_count(est) .. " seeds") or "",
+							ref_table = GreenNeedle._estimateDisplayText,
+							ref_value = "value",
 							scale = 0.3,
-							colour = G.C.WHITE,
+							colour = est_colour,
 						}},
-					}},
-				}
+					}}
 
 				local col1 = {n=G.UIT.C, config={align="tm", padding=0.05, minw=3.5}, nodes=col1_nodes}
 				local col2 = {n=G.UIT.C, config={align="tm", padding=0.05, minw=3.5}, nodes=col2_nodes}
 				local col3 = {n=G.UIT.C, config={align="tm", padding=0.05, minw=3.5}, nodes=col3_nodes}
+
+				local row = {n=G.UIT.R, config={align="cm"}, nodes={col1, col2, col3}}
 
 				return {
 					n = G.UIT.ROOT,
@@ -521,13 +558,40 @@ function create_tabs(args)
 						padding = 0.05,
 						colour = G.C.CLEAR,
 					},
-					nodes = {
-						{n=G.UIT.R, config={align="cm"}, nodes={col1, col2, col3}},
-					},
-				}
-			end,
-			tab_definition_function_args = "GreenNeedle",
-		}
+					nodes = {row},
+				}, row
+end
+
+
+-- Update the estimate text in-place without rebuilding the UI
+function GreenNeedle.update_estimate_text()
+	if GreenNeedle._estimateDisplayText then
+		local est = GreenNeedle.estimate_search_seeds()
+		local max_seeds = 2251875390625 -- 35^8
+		if est > max_seeds then
+			GreenNeedle._estimateDisplayText.value = "Est. ~" .. GreenNeedle.format_seed_count(est) .. " seeds (unlikely)"
+		elseif est > 0 then
+			GreenNeedle._estimateDisplayText.value = "Est. ~" .. GreenNeedle.format_seed_count(est) .. " seeds"
+		else
+			GreenNeedle._estimateDisplayText.value = ""
+		end
 	end
-	return ct(args)
+end
+
+-- Main menu button callback: open Green Needle settings as an overlay
+G.FUNCS.greenneedle_config = function(e)
+	G.SETTINGS.paused = true
+	GreenNeedle._suppress_pop_in = true
+	local content_box = UIBox{
+		definition = GreenNeedle.settings_panel(),
+		config = {offset = {x = 0, y = 0}},
+	}
+	G.FUNCS.overlay_menu({
+		definition = create_UIBox_generic_options({
+			back_func = "options",
+			contents = {{n=G.UIT.O, config={id = 'gn_content', object = content_box}}},
+		}),
+		config = {offset = {x = 0, y = 0}},
+	})
+	GreenNeedle._suppress_pop_in = false
 end
