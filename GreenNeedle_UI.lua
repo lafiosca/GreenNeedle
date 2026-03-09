@@ -272,22 +272,36 @@ local function max_card_selectors_for_pack(pack_label)
 end
 
 -- Build dynamic card selector rows
-local function build_card_selectors(prefix, card_type, card1_id, card2_id, max_selectors, callback1, callback2)
+-- Reverse-lookup: find the display label for a card key value in a lookup table
+local function find_card_display_label(lookup_table, card_key)
+	if not card_key or card_key == "" then return nil end
+	for label, key in pairs(lookup_table) do
+		if key == card_key then return label end
+	end
+	return nil
+end
+
+local function build_card_selectors(prefix, card_type, card1_id, card2_id, max_selectors, callback1, callback2, card1_key, card2_key)
 	local base_keys = card_keys_for_type(card_type)
 	if #base_keys == 0 then return {} end
 
+	local lookup = card_type == "tarot" and GreenNeedle.SearchTarotCardList or GreenNeedle.SearchSpectralCardList
+
 	local nodes = {}
-	nodes[#nodes + 1] = create_option_cycle({
-		label = prefix .. " Card 1",
-		scale = 0.8,
-		w = 4,
-		options = base_keys,
-		opt_callback = callback1,
-		current_option = card1_id or 1,
-	})
 	if max_selectors >= 2 then
-		local card1_display = (card1_id and card1_id > 1) and base_keys[card1_id] or nil
-		local keys2 = build_excluded_keys(base_keys, card1_display)
+		-- Bidirectional exclusion: card 1 excludes card 2's selection, and vice versa
+		local card2_label = find_card_display_label(lookup, card2_key)
+		local card1_label = find_card_display_label(lookup, card1_key)
+		local keys1 = build_excluded_keys(base_keys, card2_label)
+		local keys2 = build_excluded_keys(base_keys, card1_label)
+		nodes[#nodes + 1] = create_option_cycle({
+			label = prefix .. " Card 1",
+			scale = 0.8,
+			w = 4,
+			options = keys1,
+			opt_callback = callback1,
+			current_option = card1_id or 1,
+		})
 		nodes[#nodes + 1] = create_option_cycle({
 			label = prefix .. " Card 2",
 			scale = 0.8,
@@ -295,6 +309,15 @@ local function build_card_selectors(prefix, card_type, card1_id, card2_id, max_s
 			options = keys2,
 			opt_callback = callback2,
 			current_option = card2_id or 1,
+		})
+	else
+		nodes[#nodes + 1] = create_option_cycle({
+			label = prefix .. " Card 1",
+			scale = 0.8,
+			w = 4,
+			options = base_keys,
+			opt_callback = callback1,
+			current_option = card1_id or 1,
 		})
 	end
 	return nodes
@@ -327,6 +350,21 @@ function GreenNeedle.refresh_settings_tab()
 	end
 end
 
+-- Compute the colour for the estimate text based on seed count
+local function estimate_colour(est)
+	if est <= 0 then
+		return G.C.WHITE
+	elseif est >= 1000000000000 then
+		return G.C.RED
+	elseif est <= 1000000000 then
+		local t = est / 1000000000
+		return {1, 1, 1 - t, 1}
+	else
+		local t = (est - 1000000000) / (1000000000000 - 1000000000)
+		return {1, 1 - t, 0, 1}
+	end
+end
+
 -- Green Needle settings panel definition (shared by settings tab and main menu button)
 function GreenNeedle.settings_panel()
 				local s = GreenNeedle.SETTINGS.autoreroll
@@ -338,7 +376,8 @@ function GreenNeedle.settings_panel()
 					tag_card_nodes = build_card_selectors(
 						"Tag Pack", tag_ct,
 						s.searchTagCard1ID, s.searchTagCard2ID,
-						2, "gn_change_search_tag_card1", "gn_change_search_tag_card2"
+						2, "gn_change_search_tag_card1", "gn_change_search_tag_card2",
+						s.searchTagCard1, s.searchTagCard2
 					)
 				end
 
@@ -358,7 +397,8 @@ function GreenNeedle.settings_panel()
 					pack_card_nodes = build_card_selectors(
 						"Shop Pack", pack_ct,
 						s.searchPackCard1ID, s.searchPackCard2ID,
-						max_sel, "gn_change_search_pack_card1", "gn_change_search_pack_card2"
+						max_sel, "gn_change_search_pack_card1", "gn_change_search_pack_card2",
+						s.searchPackCard1, s.searchPackCard2
 					)
 				end
 
@@ -522,26 +562,18 @@ function GreenNeedle.settings_panel()
 				else
 					GreenNeedle._estimateDisplayText.value = ""
 				end
-				local est_colour
-				if est <= 0 then
-					est_colour = G.C.WHITE
-				elseif est >= 1000000000000 then
-					est_colour = G.C.RED
-				elseif est <= 1000000000 then
-					-- White to yellow: green stays 1, blue goes 1→0
-					local t = est / 1000000000
-					est_colour = {1, 1, 1 - t, 1}
-				else
-					-- Yellow to red: green goes 1→0
-					local t = (est - 1000000000) / (1000000000000 - 1000000000)
-					est_colour = {1, 1 - t, 0, 1}
-				end
+				local est_colour = estimate_colour(est)
+				GreenNeedle._estimateColour = GreenNeedle._estimateColour or {1, 1, 1, 1}
+				GreenNeedle._estimateColour[1] = est_colour[1]
+				GreenNeedle._estimateColour[2] = est_colour[2]
+				GreenNeedle._estimateColour[3] = est_colour[3]
+				GreenNeedle._estimateColour[4] = est_colour[4]
 				col3_nodes[#col3_nodes + 1] = {n=G.UIT.R, config={align="cm"}, nodes={
 						{n=G.UIT.T, config={
 							ref_table = GreenNeedle._estimateDisplayText,
 							ref_value = "value",
 							scale = 0.3,
-							colour = est_colour,
+							colour = GreenNeedle._estimateColour,
 						}},
 					}}
 
@@ -574,6 +606,14 @@ function GreenNeedle.update_estimate_text()
 			GreenNeedle._estimateDisplayText.value = "Est. ~" .. GreenNeedle.format_seed_count(est) .. " seeds"
 		else
 			GreenNeedle._estimateDisplayText.value = ""
+		end
+		-- Update colour in place (same table reference used by the live DynaText)
+		if GreenNeedle._estimateColour then
+			local new_colour = estimate_colour(est)
+			GreenNeedle._estimateColour[1] = new_colour[1]
+			GreenNeedle._estimateColour[2] = new_colour[2]
+			GreenNeedle._estimateColour[3] = new_colour[3]
+			GreenNeedle._estimateColour[4] = new_colour[4]
 		end
 	end
 end

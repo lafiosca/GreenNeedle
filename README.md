@@ -4,17 +4,17 @@ A [Balatro](https://www.playbalatro.com/) mod for searching game seeds that matc
 
 Requires the [Lovely](https://github.com/ethangreen-dev/lovely-injector) mod loader.
 
-*Charm Tag with Judgement + The Hanged Man, searching for a Negative Erosion:*
+*Charm Tag with Judgement + The Hanged Man, Mega Arcana shop pack with The Hanged Man, filtering for a Negative Erosion from Judgement:*
 
 ![Judgement joker and edition filtering](screenshots/settings1.png)
 
-*Mega Spectral pack with The Soul + Ankh, Director's Cut voucher, and Chicot legendary:*
+*Charm Tag with The Soul + Temperance, Mega Spectral with Ankh, Director's Cut voucher, and Chicot legendary:*
 
 ![Shop pack cards, vouchers, and legendary filtering](screenshots/settings2.png)
 
-*The Soul + Judgement in the tag pack, filtering for Negative Blueprint and Perkeo legendary:*
+*The Soul + Temperance in the tag pack, Mega Spectral with Immolate, Telescope + Observatory vouchers, and Perkeo legendary — estimate in yellow at ~10.3B seeds:*
 
-![Combined tag pack, legendary, and Judgement filters](screenshots/settings3.png)
+![Combined filters with colour-coded estimate](screenshots/settings3.png)
 
 *The search overlay shows a running count of seeds checked vs. the estimated total, an elapsed timer, and the cumulative probability that a match should have been found by now:*
 

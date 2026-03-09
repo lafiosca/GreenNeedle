@@ -76,8 +76,16 @@ local function find_card_label(lookup_table, card_key)
 	return "Any"
 end
 
--- Fix card 2 index after card 1 changes (excluded list shifts)
+-- Fix card index after the other card changes (excluded list shifts)
 local function fix_card2_index(card2_key, lookup_table, base_keys, exclude_label)
+	if not exclude_label or exclude_label == "" or exclude_label == "Any" then
+		-- No exclusion — find position in full base_keys
+		local card2_label = find_card_label(lookup_table, card2_key)
+		for i, label in ipairs(base_keys) do
+			if label == card2_label then return i end
+		end
+		return 1
+	end
 	local card2_label = find_card_label(lookup_table, card2_key)
 	local pos = 0
 	for _, label in ipairs(base_keys) do
@@ -178,21 +186,13 @@ end
 
 G.FUNCS.gn_change_search_tag_card1 = function(x)
 	local s = GreenNeedle.SETTINGS.autoreroll
-	local old_has_judgement = (s.searchTagCard1 or "") == "c_judgement" or (s.searchTagCard2 or "") == "c_judgement"
-	local old_has_soul = (s.searchTagCard1 or "") == "c_soul" or (s.searchTagCard2 or "") == "c_soul"
-		or (s.searchPackCard1 or "") == "c_soul" or (s.searchPackCard2 or "") == "c_soul"
 	s.searchTagCard1ID = x.to_key
 	s.searchTagCard1 = GreenNeedle.SearchTarotCardList[x.to_val]
-	-- If card 2 collides with new card 1, reset it; otherwise preserve
-	if s.searchTagCard1 == s.searchTagCard2 and s.searchTagCard1 ~= "" then
-		s.searchTagCard2 = ""
-		s.searchTagCard2ID = 1
-	else
-		s.searchTagCard2ID = fix_card2_index(s.searchTagCard2, GreenNeedle.SearchTarotCardList, GreenNeedle.searchTarotCardKeys, x.to_val)
-	end
+	-- Fix card 2 index for the new exclusion list
+	s.searchTagCard2ID = fix_card2_index(s.searchTagCard2, GreenNeedle.SearchTarotCardList, GreenNeedle.searchTarotCardKeys, x.to_val)
 	-- Reset Judgement joker if Judgement is no longer selected
-	local new_has_judgement = s.searchTagCard1 == "c_judgement" or (s.searchTagCard2 or "") == "c_judgement"
-	if not new_has_judgement then
+	local has_judgement = s.searchTagCard1 == "c_judgement" or (s.searchTagCard2 or "") == "c_judgement"
+	if not has_judgement then
 		s.searchJudgementJoker = ""
 		s.searchJudgementJokerID = 2
 		s.searchJudgementPage = 1
@@ -200,26 +200,19 @@ G.FUNCS.gn_change_search_tag_card1 = function(x)
 		s.searchJudgementEditionID = 1
 	end
 	reset_legendary_if_no_soul()
-	local new_has_soul = (s.searchTagCard1 or "") == "c_soul" or (s.searchTagCard2 or "") == "c_soul"
-		or (s.searchPackCard1 or "") == "c_soul" or (s.searchPackCard2 or "") == "c_soul"
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
-	if old_has_judgement ~= new_has_judgement or old_has_soul ~= new_has_soul then
-		GreenNeedle.refresh_settings_tab()
-	else
-		GreenNeedle.update_estimate_text()
-	end
+	GreenNeedle.refresh_settings_tab()
 end
 
 G.FUNCS.gn_change_search_tag_card2 = function(x)
 	local s = GreenNeedle.SETTINGS.autoreroll
-	local old_has_judgement = (s.searchTagCard1 or "") == "c_judgement" or (s.searchTagCard2 or "") == "c_judgement"
-	local old_has_soul = (s.searchTagCard1 or "") == "c_soul" or (s.searchTagCard2 or "") == "c_soul"
-		or (s.searchPackCard1 or "") == "c_soul" or (s.searchPackCard2 or "") == "c_soul"
 	s.searchTagCard2ID = x.to_key
 	s.searchTagCard2 = GreenNeedle.SearchTarotCardList[x.to_val]
+	-- Fix card 1 index for the new exclusion list
+	s.searchTagCard1ID = fix_card2_index(s.searchTagCard1, GreenNeedle.SearchTarotCardList, GreenNeedle.searchTarotCardKeys, x.to_val)
 	-- Reset Judgement joker if Judgement is no longer selected in either slot
-	local new_has_judgement = (s.searchTagCard1 or "") == "c_judgement" or s.searchTagCard2 == "c_judgement"
-	if not new_has_judgement then
+	local has_judgement = (s.searchTagCard1 or "") == "c_judgement" or s.searchTagCard2 == "c_judgement"
+	if not has_judgement then
 		s.searchJudgementJoker = ""
 		s.searchJudgementJokerID = 2
 		s.searchJudgementPage = 1
@@ -227,54 +220,34 @@ G.FUNCS.gn_change_search_tag_card2 = function(x)
 		s.searchJudgementEditionID = 1
 	end
 	reset_legendary_if_no_soul()
-	local new_has_soul = (s.searchTagCard1 or "") == "c_soul" or (s.searchTagCard2 or "") == "c_soul"
-		or (s.searchPackCard1 or "") == "c_soul" or (s.searchPackCard2 or "") == "c_soul"
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
-	if old_has_judgement ~= new_has_judgement or old_has_soul ~= new_has_soul then
-		GreenNeedle.refresh_settings_tab()
-	else
-		GreenNeedle.update_estimate_text()
-	end
+	GreenNeedle.refresh_settings_tab()
 end
 
 G.FUNCS.gn_change_search_pack_card1 = function(x)
 	local s = GreenNeedle.SETTINGS.autoreroll
-	local old_has_wraith = (s.searchPackCard1 or "") == "c_wraith" or (s.searchPackCard2 or "") == "c_wraith"
-	local old_has_soul = (s.searchTagCard1 or "") == "c_soul" or (s.searchTagCard2 or "") == "c_soul"
-		or (s.searchPackCard1 or "") == "c_soul" or (s.searchPackCard2 or "") == "c_soul"
 	s.searchPackCard1ID = x.to_key
 	local pack_type = GreenNeedle.get_pack_card_type()
+	local lookup = pack_type == "spectral" and GreenNeedle.SearchSpectralCardList or GreenNeedle.SearchTarotCardList
+	local keys = pack_type == "spectral" and GreenNeedle.searchSpectralCardKeys or GreenNeedle.searchTarotCardKeys
 	if pack_type == "spectral" then
 		s.searchPackCard1 = GreenNeedle.SearchSpectralCardList[x.to_val]
 	else
 		s.searchPackCard1 = GreenNeedle.SearchTarotCardList[x.to_val]
 	end
-	-- If card 2 collides with new card 1, reset it; otherwise preserve
-	if s.searchPackCard1 == s.searchPackCard2 and s.searchPackCard1 ~= "" then
-		s.searchPackCard2 = ""
-		s.searchPackCard2ID = 1
-	else
-		local lookup = pack_type == "spectral" and GreenNeedle.SearchSpectralCardList or GreenNeedle.SearchTarotCardList
-		local keys = pack_type == "spectral" and GreenNeedle.searchSpectralCardKeys or GreenNeedle.searchTarotCardKeys
-		s.searchPackCard2ID = fix_card2_index(s.searchPackCard2, lookup, keys, x.to_val)
-	end
+	-- Fix card 2 index for the new exclusion list
+	s.searchPackCard2ID = fix_card2_index(s.searchPackCard2, lookup, keys, x.to_val)
 	-- Only reset wraith if wraith is no longer selected in either card slot
-	local new_has_wraith = s.searchPackCard1 == "c_wraith" or (s.searchPackCard2 or "") == "c_wraith"
-	if not new_has_wraith then
+	local has_wraith = s.searchPackCard1 == "c_wraith" or (s.searchPackCard2 or "") == "c_wraith"
+	if not has_wraith then
 		s.searchWraithJoker = ""
 		s.searchWraithJokerID = 1
 		s.searchWraithEdition = ""
 		s.searchWraithEditionID = 1
 	end
 	reset_legendary_if_no_soul()
-	local new_has_soul = (s.searchTagCard1 or "") == "c_soul" or (s.searchTagCard2 or "") == "c_soul"
-		or (s.searchPackCard1 or "") == "c_soul" or (s.searchPackCard2 or "") == "c_soul"
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
-	if old_has_wraith ~= new_has_wraith or old_has_soul ~= new_has_soul then
-		GreenNeedle.refresh_settings_tab()
-	else
-		GreenNeedle.update_estimate_text()
-	end
+	GreenNeedle.refresh_settings_tab()
 end
 
 G.FUNCS.gn_change_search_wraith_joker = function(x)
@@ -339,33 +312,28 @@ end
 
 G.FUNCS.gn_change_search_pack_card2 = function(x)
 	local s = GreenNeedle.SETTINGS.autoreroll
-	local old_has_wraith = (s.searchPackCard1 or "") == "c_wraith" or (s.searchPackCard2 or "") == "c_wraith"
-	local old_has_soul = (s.searchTagCard1 or "") == "c_soul" or (s.searchTagCard2 or "") == "c_soul"
-		or (s.searchPackCard1 or "") == "c_soul" or (s.searchPackCard2 or "") == "c_soul"
 	s.searchPackCard2ID = x.to_key
 	local pack_type = GreenNeedle.get_pack_card_type()
+	local lookup = pack_type == "spectral" and GreenNeedle.SearchSpectralCardList or GreenNeedle.SearchTarotCardList
+	local keys = pack_type == "spectral" and GreenNeedle.searchSpectralCardKeys or GreenNeedle.searchTarotCardKeys
 	if pack_type == "spectral" then
 		s.searchPackCard2 = GreenNeedle.SearchSpectralCardList[x.to_val]
 	else
 		s.searchPackCard2 = GreenNeedle.SearchTarotCardList[x.to_val]
 	end
+	-- Fix card 1 index for the new exclusion list
+	s.searchPackCard1ID = fix_card2_index(s.searchPackCard1, lookup, keys, x.to_val)
 	-- Only reset wraith if wraith is no longer selected in either card slot
-	local new_has_wraith = (s.searchPackCard1 or "") == "c_wraith" or s.searchPackCard2 == "c_wraith"
-	if not new_has_wraith then
+	local has_wraith = (s.searchPackCard1 or "") == "c_wraith" or s.searchPackCard2 == "c_wraith"
+	if not has_wraith then
 		s.searchWraithJoker = ""
 		s.searchWraithJokerID = 1
 		s.searchWraithEdition = ""
 		s.searchWraithEditionID = 1
 	end
 	reset_legendary_if_no_soul()
-	local new_has_soul = (s.searchTagCard1 or "") == "c_soul" or (s.searchTagCard2 or "") == "c_soul"
-		or (s.searchPackCard1 or "") == "c_soul" or (s.searchPackCard2 or "") == "c_soul"
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
-	if old_has_wraith ~= new_has_wraith or old_has_soul ~= new_has_soul then
-		GreenNeedle.refresh_settings_tab()
-	else
-		GreenNeedle.update_estimate_text()
-	end
+	GreenNeedle.refresh_settings_tab()
 end
 
 -- Helper: determine the number of card slots for the currently selected shop pack variant
