@@ -99,19 +99,23 @@ function GreenNeedle.build_voucher2_options(v1_label)
 			lookup[label] = GreenNeedle.SearchVoucherList[label]
 		end
 	else
-		-- Add the upgrade of v1 first (most likely reason to filter ante 2)
+		-- Collect remaining base vouchers (excluding v1) and v1's upgrade
+		local items = {}
 		local upgrade = voucherUpgrades[v1_label]
 		if upgrade then
-			keys[#keys + 1] = upgrade.label
+			items[#items + 1] = upgrade.label
 			lookup[upgrade.label] = upgrade.key
 		end
-		-- Add remaining base vouchers (excluding v1, which was already purchased)
 		for i = 2, #vkeys do
 			local label = vkeys[i]
 			if label ~= v1_label then
-				keys[#keys + 1] = label
+				items[#items + 1] = label
 				lookup[label] = GreenNeedle.SearchVoucherList[label]
 			end
+		end
+		table.sort(items, function(a, b) return a:lower() < b:lower() end)
+		for _, label in ipairs(items) do
+			keys[#keys + 1] = label
 		end
 	end
 	return keys, lookup
@@ -175,6 +179,23 @@ GreenNeedle.SearchTarotCardList = {
 	["The Soul"]         = "c_soul",
 }
 
+GreenNeedle.SearchPlanetCardList = {
+	["Any"]        = "",
+	["Mercury"]    = "c_mercury",
+	["Venus"]      = "c_venus",
+	["Earth"]      = "c_earth",
+	["Mars"]       = "c_mars",
+	["Jupiter"]    = "c_jupiter",
+	["Saturn"]     = "c_saturn",
+	["Uranus"]     = "c_uranus",
+	["Neptune"]    = "c_neptune",
+	["Pluto"]      = "c_pluto",
+	["Planet X"]   = "c_planet_x",
+	["Ceres"]      = "c_ceres",
+	["Eris"]       = "c_eris",
+	["Black Hole"] = "c_black_hole",
+}
+
 GreenNeedle.SearchRareJokerList = {
 	["Any"]              = "",
 	["DNA"]              = "j_dna",
@@ -217,13 +238,15 @@ GreenNeedle.seedsPerFrame = {
 
 local searchTagKeys = {"Any", "Charm Tag", "Double Tag", "Uncommon Tag", "Rare Tag", "Holographic Tag", "Foil Tag", "Polychrome Tag", "Investment Tag", "Voucher Tag", "Boss Tag", "Juggle Tag", "Coupon Tag", "Economy Tag", "Speed Tag", "D6 Tag"}
 local searchPackKeys = {"Any", "Normal Arcana", "Jumbo Arcana", "Mega Arcana", "Normal Celestial", "Jumbo Celestial", "Mega Celestial", "Normal Standard", "Jumbo Standard", "Mega Standard", "Normal Buffoon", "Jumbo Buffoon", "Mega Buffoon", "Normal Spectral", "Jumbo Spectral", "Mega Spectral"}
-GreenNeedle.searchVoucherKeys = {"Any", "Overstock", "Clearance Sale", "Hone", "Reroll Surplus", "Crystal Ball", "Telescope", "Grabber", "Wasteful", "Tarot Merchant", "Planet Merchant", "Seed Money", "Blank", "Magic Trick", "Hieroglyph", "Director's Cut", "Paint Brush"}
+GreenNeedle.searchVoucherKeys = {"Any", "Blank", "Clearance Sale", "Crystal Ball", "Director's Cut", "Grabber", "Hieroglyph", "Hone", "Magic Trick", "Overstock", "Paint Brush", "Planet Merchant", "Reroll Surplus", "Seed Money", "Tarot Merchant", "Telescope", "Wasteful"}
 local searchVoucherKeys = GreenNeedle.searchVoucherKeys
 local searchLegendaryKeys = {"Any", "Canio", "Triboulet", "Yorick", "Chicot", "Perkeo"}
 GreenNeedle.searchSpectralCardKeys = {"Any", "Ankh", "Aura", "Black Hole", "Cryptid", "Deja Vu", "Ectoplasm", "Familiar", "Grim", "Hex", "Immolate", "Incantation", "Medium", "Ouija", "Sigil", "Talisman", "The Soul", "Trance", "Wraith"}
 local searchSpectralCardKeys = GreenNeedle.searchSpectralCardKeys
 GreenNeedle.searchTarotCardKeys = {"Any", "The Chariot", "Death", "The Devil", "The Emperor", "The Empress", "The Fool", "The Hanged Man", "The Hermit", "The High Priestess", "Judgement", "Justice", "The Lovers", "The Magician", "The Moon", "The Soul", "The Star", "Strength", "The Sun", "Temperance", "The Tower", "Wheel of Fortune", "The World"}
 local searchTarotCardKeys = GreenNeedle.searchTarotCardKeys
+GreenNeedle.searchPlanetCardKeys = {"Any", "Black Hole", "Ceres", "Earth", "Eris", "Jupiter", "Mars", "Mercury", "Neptune", "Planet X", "Pluto", "Saturn", "Uranus", "Venus"}
+local searchPlanetCardKeys = GreenNeedle.searchPlanetCardKeys
 local searchRareJokerKeys = {"Any", "Ancient Joker", "Baron", "Baseball Card", "Blueprint", "Brainstorm", "Burnt Joker", "Campfire", "DNA", "Driver's License", "The Duo", "The Family", "Hit the Road", "Invisible Joker", "Obelisk", "The Order", "Stuntman", "The Tribe", "The Trio", "Vagabond", "Wee Joker"}
 local searchWraithEditionKeys = {"Any", "Foil", "Holographic", "Polychrome", "Negative"}
 local seedsPerFrame = {"1K", "10K", "100K", "500K", "1M"}
@@ -242,9 +265,14 @@ local function build_excluded_keys(base_keys, exclude_label)
 	return result
 end
 
+-- Buffoon packs use paginated selectors (same joker list as Judgement)
+-- built directly in settings_panel; see build_buffoon_card_selectors below.
+
 -- Determine which card list a given tag triggers
 local function tag_card_type(tag_id)
 	if tag_id == "tag_charm" then return "tarot" end
+	if tag_id == "tag_uncommon" then return "tag_joker_uncommon" end
+	if tag_id == "tag_rare" then return "tag_joker_rare" end
 	return nil
 end
 
@@ -254,6 +282,8 @@ local function pack_card_type(pack_keys_list)
 	local first = pack_keys_list[1]
 	if first:find("arcana") then return "tarot" end
 	if first:find("spectral") then return "spectral" end
+	if first:find("celestial") then return "planet" end
+	if first:find("buffoon") then return "joker" end
 	return nil
 end
 
@@ -261,6 +291,8 @@ end
 local function card_keys_for_type(card_type)
 	if card_type == "tarot" then return searchTarotCardKeys end
 	if card_type == "spectral" then return searchSpectralCardKeys end
+	if card_type == "planet" then return searchPlanetCardKeys end
+	-- joker type uses paginated selectors, handled separately
 	return {}
 end
 
@@ -285,7 +317,12 @@ local function build_card_selectors(prefix, card_type, card1_id, card2_id, max_s
 	local base_keys = card_keys_for_type(card_type)
 	if #base_keys == 0 then return {} end
 
-	local lookup = card_type == "tarot" and GreenNeedle.SearchTarotCardList or GreenNeedle.SearchSpectralCardList
+	local lookup
+	if card_type == "tarot" then lookup = GreenNeedle.SearchTarotCardList
+	elseif card_type == "spectral" then lookup = GreenNeedle.SearchSpectralCardList
+	elseif card_type == "planet" then lookup = GreenNeedle.SearchPlanetCardList
+	else lookup = {}
+	end
 
 	local nodes = {}
 	if max_selectors >= 2 then
@@ -320,6 +357,43 @@ local function build_card_selectors(prefix, card_type, card1_id, card2_id, max_s
 			current_option = card1_id or 1,
 		})
 	end
+	return nodes
+end
+
+-- Build paginated joker card selectors for buffoon packs + edition selector.
+-- Returns a list of UI nodes (similar to build_card_selectors but paginated).
+local function build_buffoon_card_selectors(s, max_selectors)
+	local nodes = {}
+	local page1 = s.searchBuffoonCard1Page or 1
+	local opts1 = GreenNeedle.build_judgement_selector(page1)
+	nodes[#nodes + 1] = create_option_cycle({
+		label = "Pack Card 1",
+		scale = 0.8,
+		w = 4,
+		options = opts1,
+		opt_callback = "gn_change_search_buffoon_card1",
+		current_option = s.searchPackCard1ID or 2,
+	})
+	if max_selectors >= 2 then
+		local page2 = s.searchBuffoonCard2Page or 1
+		local opts2 = GreenNeedle.build_judgement_selector(page2)
+		nodes[#nodes + 1] = create_option_cycle({
+			label = "Pack Card 2",
+			scale = 0.8,
+			w = 4,
+			options = opts2,
+			opt_callback = "gn_change_search_buffoon_card2",
+			current_option = s.searchPackCard2ID or 2,
+		})
+	end
+	nodes[#nodes + 1] = create_option_cycle({
+		label = "Buffoon Edition",
+		scale = 0.8,
+		w = 4,
+		options = searchWraithEditionKeys,
+		opt_callback = "gn_change_search_buffoon_edition",
+		current_option = s.searchBuffoonEditionID or 1,
+	})
 	return nodes
 end
 
@@ -372,7 +446,21 @@ function GreenNeedle.settings_panel()
 				-- Dynamic card selectors for tag
 				local tag_ct = tag_card_type(s.searchTag or "")
 				local tag_card_nodes = {}
-				if tag_ct then
+				if tag_ct == "tag_joker_uncommon" or tag_ct == "tag_joker_rare" then
+					-- Uncommon/Rare tag: paginated joker selector filtered by rarity
+					local rarity = tag_ct == "tag_joker_rare" and 3 or 2
+					local page = s.searchTagJokerPage or 1
+					local opts = GreenNeedle.build_rarity_selector(page, rarity)
+					local label = rarity == 3 and "Rare Tag Joker" or "Uncommon Tag Joker"
+					tag_card_nodes[#tag_card_nodes + 1] = create_option_cycle({
+						label = label,
+						scale = 0.8,
+						w = 4,
+						options = opts,
+						opt_callback = "gn_change_search_tag_joker",
+						current_option = s.searchTagJokerID or 2,
+					})
+				elseif tag_ct then
 					tag_card_nodes = build_card_selectors(
 						"Tag Pack", tag_ct,
 						s.searchTagCard1ID, s.searchTagCard2ID,
@@ -392,7 +480,10 @@ function GreenNeedle.settings_panel()
 				end
 				local pack_ct = pack_card_type(s.searchPack or {})
 				local pack_card_nodes = {}
-				if pack_ct then
+				if pack_ct == "joker" then
+					local max_sel = max_card_selectors_for_pack(pack_label)
+					pack_card_nodes = build_buffoon_card_selectors(s, max_sel)
+				elseif pack_ct then
 					local max_sel = max_card_selectors_for_pack(pack_label)
 					pack_card_nodes = build_card_selectors(
 						"Shop Pack", pack_ct,
@@ -453,6 +544,14 @@ function GreenNeedle.settings_panel()
 					end
 				end
 
+				-- Check if Judgement is selected as a shop pack card (for shop judgement joker selector)
+				local has_judgement_pack_card = false
+				if pack_ct == "tarot" then
+					if (s.searchPackCard1 or "") == "c_judgement" or (s.searchPackCard2 or "") == "c_judgement" then
+						has_judgement_pack_card = true
+					end
+				end
+
 				-- Column 2: Shop Pack + shop pack card selectors + wraith joker
 				local col2_nodes = {
 					create_option_cycle({
@@ -483,6 +582,26 @@ function GreenNeedle.settings_panel()
 						options = searchWraithEditionKeys,
 						opt_callback = "gn_change_search_wraith_edition",
 						current_option = s.searchWraithEditionID or 1,
+					})
+				end
+				if has_judgement_pack_card then
+					local jud_page = s.searchShopJudgementPage or 1
+					local jud_options = GreenNeedle.build_judgement_selector(jud_page)
+					col2_nodes[#col2_nodes + 1] = create_option_cycle({
+						label = "Judgement Joker",
+						scale = 0.8,
+						w = 4,
+						options = jud_options,
+						opt_callback = "gn_change_search_shop_judgement_joker",
+						current_option = s.searchShopJudgementJokerID or 2,
+					})
+					col2_nodes[#col2_nodes + 1] = create_option_cycle({
+						label = "Judgement Edition",
+						scale = 0.8,
+						w = 4,
+						options = searchWraithEditionKeys,
+						opt_callback = "gn_change_search_shop_judgement_edition",
+						current_option = s.searchShopJudgementEditionID or 1,
 					})
 				end
 

@@ -470,39 +470,61 @@ static const char *SPECTRAL_POOL[] = {
 #define SPECTRAL_POOL_SIZE 18
 #define SPECTRAL_CARDS_AVAILABLE 16  /* only indices 0..15 are real cards */
 
-/* Booster packs with weights (matches Balatro's G.P_CENTER_POOLS['Booster']) */
+/* Planet cards (order-sorted, 12 base + softlocked).
+ * Pool uses all 12 base entries; Planet X, Ceres, Eris are softlocked but still
+ * in the pool (they're added with add=true, just not always discovered).
+ * Black Hole is a soul check (soul_Planet), not in the normal pool.
+ * The game's Planet pool has exactly 12 entries (matching G.P_CENTER_POOLS["Planet"]). */
+static const char *PLANET_POOL[] = {
+    "c_mercury",    /* order 1  */
+    "c_venus",      /* order 2  */
+    "c_earth",      /* order 3  */
+    "c_mars",       /* order 4  */
+    "c_jupiter",    /* order 5  */
+    "c_saturn",     /* order 6  */
+    "c_uranus",     /* order 7  */
+    "c_neptune",    /* order 8  */
+    "c_pluto",      /* order 9  */
+    "c_planet_x",   /* order 10 - softlocked */
+    "c_ceres",      /* order 11 - softlocked */
+    "c_eris",       /* order 12 - softlocked */
+};
+#define PLANET_POOL_SIZE 12
+
+/* Booster packs with weights (matches Balatro's G.P_CENTER_POOLS['Booster']).
+ * Weights from game.lua — order-sorted to match the game's iteration order. */
 typedef struct { const char *key; double weight; } PackDef;
 static const PackDef PACK_DEFS[] = {
-    { "p_arcana_normal_1",    4.00 },
-    { "p_arcana_normal_2",    4.00 },
-    { "p_arcana_normal_3",    4.00 },
-    { "p_arcana_normal_4",    4.00 },
-    { "p_arcana_jumbo_1",     2.00 },
-    { "p_arcana_jumbo_2",     2.00 },
-    { "p_arcana_mega_1",      0.50 },
-    { "p_arcana_mega_2",      0.50 },
-    { "p_celestial_normal_1", 4.00 },
-    { "p_celestial_normal_2", 4.00 },
-    { "p_celestial_normal_3", 4.00 },
-    { "p_celestial_normal_4", 4.00 },
-    { "p_celestial_jumbo_1",  2.00 },
-    { "p_celestial_jumbo_2",  2.00 },
-    { "p_celestial_mega_1",   0.50 },
-    { "p_celestial_mega_2",   0.50 },
-    { "p_standard_normal_1",  4.00 },
-    { "p_standard_normal_2",  4.00 },
-    { "p_standard_normal_3",  4.00 },
-    { "p_standard_normal_4",  4.00 },
-    { "p_standard_jumbo_1",   2.00 },
-    { "p_standard_jumbo_2",   2.00 },
-    { "p_standard_mega_1",    0.50 },
-    { "p_standard_mega_2",    0.50 },
-    { "p_buffoon_normal_1",   1.20 },
-    { "p_buffoon_normal_2",   1.20 },
+    { "p_arcana_normal_1",    1.00 },
+    { "p_arcana_normal_2",    1.00 },
+    { "p_arcana_normal_3",    1.00 },
+    { "p_arcana_normal_4",    1.00 },
+    { "p_arcana_jumbo_1",     1.00 },
+    { "p_arcana_jumbo_2",     1.00 },
+    { "p_arcana_mega_1",      0.25 },
+    { "p_arcana_mega_2",      0.25 },
+    { "p_celestial_normal_1", 1.00 },
+    { "p_celestial_normal_2", 1.00 },
+    { "p_celestial_normal_3", 1.00 },
+    { "p_celestial_normal_4", 1.00 },
+    { "p_celestial_jumbo_1",  1.00 },
+    { "p_celestial_jumbo_2",  1.00 },
+    { "p_celestial_mega_1",   0.25 },
+    { "p_celestial_mega_2",   0.25 },
+    { "p_standard_normal_1",  1.00 },
+    { "p_standard_normal_2",  1.00 },
+    { "p_standard_normal_3",  1.00 },
+    { "p_standard_normal_4",  1.00 },
+    { "p_standard_jumbo_1",   1.00 },
+    { "p_standard_jumbo_2",   1.00 },
+    { "p_standard_mega_1",    0.25 },
+    { "p_standard_mega_2",    0.25 },
+    { "p_buffoon_normal_1",   0.60 },
+    { "p_buffoon_normal_2",   0.60 },
     { "p_buffoon_jumbo_1",    0.60 },
     { "p_buffoon_mega_1",     0.15 },
-    { "p_spectral_normal_1",  0.60 },
-    { "p_spectral_normal_2",  0.60 },
+    { "p_spectral_normal_1",  0.30 },
+    { "p_spectral_normal_2",  0.30 },
     { "p_spectral_jumbo_1",   0.30 },
     { "p_spectral_mega_1",    0.07 },
 };
@@ -742,6 +764,48 @@ static const char *predict_judgement_joker_h(const char *seed, int slen, int ant
     return pool[idx - 1] ? pool[idx - 1] : "j_joker";
 }
 
+/* Predict the joker created by Uncommon Tag or Rare Tag.
+ * Uncommon Tag: create_card('Joker', ..., nil, 0.9, ..., 'uta') → forced uncommon
+ * Rare Tag:     create_card('Joker', ..., nil, 1, ..., 'rta')   → forced rare
+ * No rarity roll needed since it's forced by the _rarity parameter. */
+static const char *predict_tag_joker_h(const char *seed, int slen, int ante,
+                                        const char *tag_key, double hs) {
+    if (hs < 0) hs = pseudohash(seed, slen);
+
+    const char **pool;
+    int pool_size;
+    int rarity;
+    const char *key_append;
+    if (strcmp(tag_key, "tag_rare") == 0) {
+        pool = RARE_JOKER_POOL; pool_size = RARE_JOKER_POOL_SIZE; rarity = 3;
+        key_append = "rta";
+    } else {
+        /* tag_uncommon */
+        pool = UNCOMMON_JOKER_POOL; pool_size = UNCOMMON_JOKER_POOL_SIZE; rarity = 2;
+        key_append = "uta";
+    }
+
+    char pool_key[32];
+    int pklen = snprintf(pool_key, sizeof(pool_key), "Joker%d%s%d", rarity, key_append, ante);
+    double pseed = gn_pseudoseed_h(pool_key, pklen, seed, slen, hs);
+    LRandom rng = randomseed(pseed);
+    uint64_t idx = l_randint(&rng, 1, (uint64_t)pool_size);
+
+    /* Handle UNAVAILABLE slots with resampling */
+    if (pool[idx - 1] == NULL) {
+        int resample = 1;
+        while (pool[idx - 1] == NULL && resample < 100) {
+            resample++;
+            char reskey[64];
+            int rklen2 = snprintf(reskey, sizeof(reskey), "Joker%d%s%d_resample%d", rarity, key_append, ante, resample);
+            double rpseed = gn_pseudoseed_h(reskey, rklen2, seed, slen, hs);
+            rng = randomseed(rpseed);
+            idx = l_randint(&rng, 1, (uint64_t)pool_size);
+        }
+    }
+    return pool[idx - 1] ? pool[idx - 1] : "j_joker";
+}
+
 /* Predict the edition of the joker Judgement creates.
  * Uses pseudoseed key "edijud" + ante with poll_edition base rates. */
 static const char *predict_judgement_edition_h(const char *seed, int slen, int ante, double hs) {
@@ -879,6 +943,109 @@ static bool check_spectral_card_h(const char *seed, int slen, const char *key_ap
     return predict_spectral_inner(seed, slen, key_append, ante, pack_size, extra_excluded, hs, NULL, target_card);
 }
 
+/* Check if a target planet card appears in a celestial pack.
+ * soul_Planet check: >0.997 → Black Hole.
+ * Normal cards drawn from PLANET_POOL with key "Planet{append}{ante}". */
+static bool check_planet_card_h(const char *seed, int slen, const char *key_append, int ante,
+                                 int pack_size, double hs, const char *target_card) {
+    if (hs < 0) hs = pseudohash(seed, slen);
+    char soul_key[64];
+    int soul_klen = snprintf(soul_key, sizeof(soul_key), "soul_Planet%d", ante);
+    char card_key[64];
+    int card_klen = snprintf(card_key, sizeof(card_key), "Planet%s%d", key_append, ante);
+
+    int card_advance = 0;
+    for (int slot = 1; slot <= pack_size; slot++) {
+        double soul_pseed = gn_pseudoseed_advance_h(soul_key, soul_klen, seed, slen, slot, hs);
+        LRandom soul_rng = randomseed(soul_pseed);
+        if (l_random(&soul_rng) > 0.997) {
+            if (strcmp("c_black_hole", target_card) == 0) return true;
+            /* Black Hole fires: card pool state NOT advanced */
+        } else {
+            card_advance++;
+            double pseed = gn_pseudoseed_advance_h(card_key, card_klen, seed, slen, card_advance, hs);
+            LRandom rng = randomseed(pseed);
+            uint64_t idx = l_randint(&rng, 1, PLANET_POOL_SIZE);
+            if (strcmp(PLANET_POOL[idx - 1], target_card) == 0) return true;
+        }
+    }
+    return false;
+}
+
+/* Check if a target joker appears in a buffoon pack, optionally with a specific edition.
+ * Buffoon packs use create_card("Joker", ..., nil, nil, true, true, nil, 'buf').
+ * Rarity roll: pseudorandom('rarity' .. ante .. key_append), per slot.
+ *   >0.95 → Rare(3), >0.7 → Uncommon(2), else Common(1).
+ * Joker: pseudorandom_element(pool, pseudoseed('Joker' .. rarity .. key_append .. ante)).
+ * Edition: poll_edition('edi' .. key_append .. ante), advanced per slot.
+ * Advances are tracked per pool key across slots.
+ * If target_edition is NULL/"", only the joker is checked.
+ * If both target_joker and target_edition are set, they must match the same slot. */
+static bool check_joker_card_h(const char *seed, int slen, const char *key_append, int ante,
+                                int pack_size, double hs, const char *target_joker,
+                                const char *target_edition) {
+    if (hs < 0) hs = pseudohash(seed, slen);
+    bool want_edition = target_edition && target_edition[0];
+    bool want_joker = target_joker && target_joker[0];
+
+    /* Track per-pool-key advance counts (one for each of 3 rarity levels) */
+    int advance_common = 0, advance_uncommon = 0, advance_rare = 0;
+
+    char rarity_key[32];
+    int rarity_klen = snprintf(rarity_key, sizeof(rarity_key), "rarity%d%s", ante, key_append);
+
+    /* Edition key: "edi" + key_append + ante */
+    char edi_key[32];
+    int edi_klen = snprintf(edi_key, sizeof(edi_key), "edi%s%d", key_append, ante);
+
+    for (int slot = 1; slot <= pack_size; slot++) {
+        /* Determine rarity */
+        double rarity_pseed = gn_pseudoseed_advance_h(rarity_key, rarity_klen, seed, slen, slot, hs);
+        LRandom rarity_rng = randomseed(rarity_pseed);
+        double rarity_roll = l_random(&rarity_rng);
+
+        const char **pool;
+        int pool_size;
+        int rarity;
+        int *advance;
+        if (rarity_roll > 0.95) {
+            pool = RARE_JOKER_POOL; pool_size = RARE_JOKER_POOL_SIZE; rarity = 3;
+            advance = &advance_rare;
+        } else if (rarity_roll > 0.7) {
+            pool = UNCOMMON_JOKER_POOL; pool_size = UNCOMMON_JOKER_POOL_SIZE; rarity = 2;
+            advance = &advance_uncommon;
+        } else {
+            pool = COMMON_JOKER_POOL; pool_size = COMMON_JOKER_POOL_SIZE; rarity = 1;
+            advance = &advance_common;
+        }
+
+        (*advance)++;
+        char pool_key[32];
+        int pklen = snprintf(pool_key, sizeof(pool_key), "Joker%d%s%d", rarity, key_append, ante);
+        double pseed = gn_pseudoseed_advance_h(pool_key, pklen, seed, slen, *advance, hs);
+        LRandom rng = randomseed(pseed);
+        uint64_t idx = l_randint(&rng, 1, (uint64_t)pool_size);
+
+        bool joker_match = !want_joker || (pool[idx - 1] && strcmp(pool[idx - 1], target_joker) == 0);
+
+        if (joker_match && want_edition) {
+            /* Check edition for this slot */
+            double edi_pseed = gn_pseudoseed_advance_h(edi_key, edi_klen, seed, slen, slot, hs);
+            LRandom edi_rng = randomseed(edi_pseed);
+            double poll = l_random(&edi_rng);
+            const char *edi = "";
+            if (poll > 0.997) edi = "e_negative";
+            else if (poll > 1.0 - 0.006) edi = "e_polychrome";
+            else if (poll > 1.0 - 0.02) edi = "e_holographic";
+            else if (poll > 1.0 - 0.04) edi = "e_foil";
+            if (strcmp(edi, target_edition) == 0) return true;
+        } else if (joker_match && !want_edition) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /* --------------------------------------------------------------------------
  * Public API -- called from Lua via FFI
  * -------------------------------------------------------------------------- */
@@ -931,12 +1098,25 @@ typedef struct {
     const char    *wraith_edition;
     const char    *judgement_joker;
     const char    *judgement_edition;
+    const char    *planet_card;
+    const char    *planet_card2;
+    const char    *planet_key_append;
+    int            planet_pack_size;
+    const char    *joker_card;
+    const char    *joker_card2;
+    const char    *joker_key_append;
+    int            joker_pack_size;
+    const char    *joker_edition;
+    const char    *tag_joker;
     bool           want_tag, want_pack, want_voucher;
     bool           want_legendary, want_spectral;
     bool           want_tarot_card, want_tarot_card2;
     bool           want_spectral2, want_voucher2;
     bool           want_wraith_joker, want_wraith_edition;
     bool           want_judgement_joker, want_judgement_edition;
+    bool           want_planet_card, want_planet_card2;
+    bool           want_joker_card, want_joker_card2;
+    bool           want_tag_joker;
     /* Output */
     char           result[SEED_LEN + 1];
     /* Shared: early exit flag (set by any thread that finds a match) */
@@ -1012,6 +1192,30 @@ static void *search_worker(void *arg) {
             if (strcmp(predict_judgement_edition_h(seed, slen, 1, hs), w->judgement_edition) != 0)
                 ok = false;
         }
+        if (ok && w->want_tag_joker) {
+            if (strcmp(predict_tag_joker_h(seed, slen, 1, w->tag, hs), w->tag_joker) != 0)
+                ok = false;
+        }
+        if (ok && w->want_planet_card) {
+            if (!check_planet_card_h(seed, slen, w->planet_key_append, 1,
+                                      w->planet_pack_size, hs, w->planet_card))
+                ok = false;
+        }
+        if (ok && w->want_planet_card2) {
+            if (!check_planet_card_h(seed, slen, w->planet_key_append, 1,
+                                      w->planet_pack_size, hs, w->planet_card2))
+                ok = false;
+        }
+        if (ok && w->want_joker_card) {
+            if (!check_joker_card_h(seed, slen, w->joker_key_append, 1,
+                                     w->joker_pack_size, hs, w->joker_card, w->joker_edition))
+                ok = false;
+        }
+        if (ok && w->want_joker_card2) {
+            if (!check_joker_card_h(seed, slen, w->joker_key_append, 1,
+                                     w->joker_pack_size, hs, w->joker_card2, NULL))
+                ok = false;
+        }
         if (ok && w->want_voucher2) {
             /* Ante 2 voucher: the ante 1 voucher was purchased, so mark it used */
             uint32_t used = 0;
@@ -1053,7 +1257,17 @@ const char *greenneedle_search(
     const char *wraith_edition,
     int         spectral_pack_size,
     const char *judgement_joker,
-    const char *judgement_edition
+    const char *judgement_edition,
+    const char *planet_card,
+    const char *planet_card2,
+    const char *planet_key_append,
+    int         planet_pack_size,
+    const char *joker_card,
+    const char *joker_card2,
+    const char *joker_key_append,
+    int         joker_pack_size,
+    const char *joker_edition,
+    const char *tag_joker
 ) {
     static char result[16];
     result[0] = '\0';
@@ -1087,6 +1301,11 @@ const char *greenneedle_search(
     bool want_wraith_edition = wraith_edition && wraith_edition[0];
     bool want_judgement_joker = judgement_joker && judgement_joker[0];
     bool want_judgement_edition = judgement_edition && judgement_edition[0];
+    bool want_planet_card = planet_card && planet_card[0];
+    bool want_planet_card2 = planet_card2 && planet_card2[0];
+    bool want_joker_card = joker_card && joker_card[0];
+    bool want_joker_card2 = joker_card2 && joker_card2[0];
+    bool want_tag_joker = tag_joker && tag_joker[0];
 
     /* Decode start_seed to a uint64 */
     uint64_t offset = 0;
@@ -1152,6 +1371,21 @@ const char *greenneedle_search(
         w->judgement_edition = judgement_edition;
         w->want_judgement_joker = want_judgement_joker;
         w->want_judgement_edition = want_judgement_edition;
+        w->planet_card     = planet_card;
+        w->planet_card2    = planet_card2;
+        w->planet_key_append = planet_key_append && planet_key_append[0] ? planet_key_append : "pl1";
+        w->planet_pack_size = planet_pack_size > 0 ? planet_pack_size : 5;
+        w->want_planet_card = want_planet_card;
+        w->want_planet_card2 = want_planet_card2;
+        w->joker_card      = joker_card;
+        w->joker_card2     = joker_card2;
+        w->joker_key_append = joker_key_append && joker_key_append[0] ? joker_key_append : "buf";
+        w->joker_pack_size = joker_pack_size > 0 ? joker_pack_size : 4;
+        w->joker_edition   = joker_edition;
+        w->want_joker_card = want_joker_card;
+        w->want_joker_card2 = want_joker_card2;
+        w->tag_joker       = tag_joker;
+        w->want_tag_joker  = want_tag_joker;
         w->result[0]       = '\0';
         w->found           = &found_flag;
         cursor += chunk;

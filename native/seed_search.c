@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "  tag=%s pack=%s voucher=%s legendary=%s spectral=%s tarot=%s voucher2=%s wraith=%s edition=%s\n",
             tag, pack, voucher, legendary, spectral, tarot, voucher2, wraith_joker, wraith_edition);
 
-    const char *result = greenneedle_search(start_seed, count, tag, pack, voucher, legendary, spectral, 0, tarot, tarot_append, tarot_pack_size, voucher2, tarot2, spectral2, wraith_joker, 0xFFFFF, wraith_edition, spectral_pack_size);
+    const char *result = greenneedle_search(start_seed, count, tag, pack, voucher, legendary, spectral, 0, tarot, tarot_append, tarot_pack_size, voucher2, tarot2, spectral2, wraith_joker, 0xFFFFF, wraith_edition, spectral_pack_size, "", "", "", "", "pl1", 5, "", "", "buf", 4, "", "");
 
     if (result && result[0]) {
         printf("%s\n", result);

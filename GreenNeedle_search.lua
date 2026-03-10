@@ -40,7 +40,17 @@ do
                 const char *wraith_edition,
                 int         spectral_pack_size,
                 const char *judgement_joker,
-                const char *judgement_edition
+                const char *judgement_edition,
+                const char *planet_card,
+                const char *planet_card2,
+                const char *planet_key_append,
+                int         planet_pack_size,
+                const char *joker_card,
+                const char *joker_card2,
+                const char *joker_key_append,
+                int         joker_pack_size,
+                const char *joker_edition,
+                const char *tag_joker
             );
         ]]
         local dylib_path = lovely.mod_dir .. "/GreenNeedle/greenneedle.dylib"
@@ -52,6 +62,23 @@ do
             end
         end
     end
+end
+
+-- Dump booster pool weights (called lazily on first use)
+GreenNeedle._booster_pool_dumped = false
+function GreenNeedle.dump_booster_pool()
+	if GreenNeedle._booster_pool_dumped then return end
+	GreenNeedle._booster_pool_dumped = true
+	if G and G.P_CENTER_POOLS and G.P_CENTER_POOLS['Booster'] then
+		local total = 0
+		for _, v in ipairs(G.P_CENTER_POOLS['Booster']) do
+			total = total + (v.weight or 1)
+		end
+		print(string.format("[GN] Booster pool: %d entries, total_weight=%.4f", #G.P_CENTER_POOLS['Booster'], total))
+		for i, v in ipairs(G.P_CENTER_POOLS['Booster']) do
+			print(string.format("[GN]   %2d: %-30s weight=%.2f order=%d", i, v.key, v.weight or 1, v.order or 0))
+		end
+	end
 end
 
 -- ---------------------------------------------------------------------------
@@ -123,6 +150,9 @@ G.FUNCS.gn_change_search_tag = function(x)
 	GreenNeedle.SETTINGS.autoreroll.searchJudgementPage = 1
 	GreenNeedle.SETTINGS.autoreroll.searchJudgementEdition = ""
 	GreenNeedle.SETTINGS.autoreroll.searchJudgementEditionID = 1
+	GreenNeedle.SETTINGS.autoreroll.searchTagJoker = ""
+	GreenNeedle.SETTINGS.autoreroll.searchTagJokerID = 2
+	GreenNeedle.SETTINGS.autoreroll.searchTagJokerPage = 1
 	reset_legendary_if_no_soul()
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
 	GreenNeedle.refresh_settings_tab()
@@ -132,14 +162,27 @@ G.FUNCS.gn_change_search_pack = function(x)
 	GreenNeedle.SETTINGS.autoreroll.searchPackID = x.to_key
 	GreenNeedle.SETTINGS.autoreroll.searchPack = GreenNeedle.SearchPackList[x.to_val]
 	-- Reset pack card filters when pack changes
+	-- Buffoon packs use paginated selectors where ID 1 is a sentinel, so default to 2
+	local is_buffoon = GreenNeedle.SearchPackList[x.to_val] and
+		#GreenNeedle.SearchPackList[x.to_val] > 0 and
+		GreenNeedle.SearchPackList[x.to_val][1]:find("buffoon")
 	GreenNeedle.SETTINGS.autoreroll.searchPackCard1 = ""
-	GreenNeedle.SETTINGS.autoreroll.searchPackCard1ID = 1
+	GreenNeedle.SETTINGS.autoreroll.searchPackCard1ID = is_buffoon and 2 or 1
 	GreenNeedle.SETTINGS.autoreroll.searchPackCard2 = ""
-	GreenNeedle.SETTINGS.autoreroll.searchPackCard2ID = 1
+	GreenNeedle.SETTINGS.autoreroll.searchPackCard2ID = is_buffoon and 2 or 1
 	GreenNeedle.SETTINGS.autoreroll.searchWraithJoker = ""
 	GreenNeedle.SETTINGS.autoreroll.searchWraithJokerID = 1
 	GreenNeedle.SETTINGS.autoreroll.searchWraithEdition = ""
 	GreenNeedle.SETTINGS.autoreroll.searchWraithEditionID = 1
+	GreenNeedle.SETTINGS.autoreroll.searchShopJudgementJoker = ""
+	GreenNeedle.SETTINGS.autoreroll.searchShopJudgementJokerID = 2
+	GreenNeedle.SETTINGS.autoreroll.searchShopJudgementPage = 1
+	GreenNeedle.SETTINGS.autoreroll.searchShopJudgementEdition = ""
+	GreenNeedle.SETTINGS.autoreroll.searchShopJudgementEditionID = 1
+	GreenNeedle.SETTINGS.autoreroll.searchBuffoonCard1Page = 1
+	GreenNeedle.SETTINGS.autoreroll.searchBuffoonCard2Page = 1
+	GreenNeedle.SETTINGS.autoreroll.searchBuffoonEdition = ""
+	GreenNeedle.SETTINGS.autoreroll.searchBuffoonEditionID = 1
 	reset_legendary_if_no_soul()
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
 	GreenNeedle.refresh_settings_tab()
@@ -152,11 +195,28 @@ G.FUNCS.gn_change_seeds_per_frame = function(x)
 end
 
 G.FUNCS.gn_change_search_voucher = function(x)
-	GreenNeedle.SETTINGS.autoreroll.searchVoucherID = x.to_key
-	GreenNeedle.SETTINGS.autoreroll.searchVoucher = GreenNeedle.SearchVoucherList[x.to_val]
-	-- Reset voucher 2 when voucher 1 changes (list depends on v1)
-	GreenNeedle.SETTINGS.autoreroll.searchVoucher2 = ""
-	GreenNeedle.SETTINGS.autoreroll.searchVoucher2ID = 1
+	local s = GreenNeedle.SETTINGS.autoreroll
+	s.searchVoucherID = x.to_key
+	s.searchVoucher = GreenNeedle.SearchVoucherList[x.to_val]
+	-- Preserve voucher 2 selection if it exists in the new list
+	local new_v2_keys, new_v2_lookup = GreenNeedle.build_voucher2_options(x.to_val)
+	if s.searchVoucher2 and s.searchVoucher2 ~= "" then
+		-- Find current v2 label by reverse lookup
+		local v2_label = nil
+		for label, key in pairs(new_v2_lookup) do
+			if key == s.searchVoucher2 then v2_label = label; break end
+		end
+		if v2_label then
+			-- Find its index in the new list
+			for i, k in ipairs(new_v2_keys) do
+				if k == v2_label then s.searchVoucher2ID = i; break end
+			end
+		else
+			-- Current v2 not in new list (e.g. was the upgrade of old v1), reset
+			s.searchVoucher2 = ""
+			s.searchVoucher2ID = 1
+		end
+	end
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
 	GreenNeedle.refresh_settings_tab()
 end
@@ -224,17 +284,42 @@ G.FUNCS.gn_change_search_tag_card2 = function(x)
 	GreenNeedle.refresh_settings_tab()
 end
 
+-- Helper: get the lookup table and keys for the current pack card type
+local function pack_card_lookup_and_keys()
+	local pack_type = GreenNeedle.get_pack_card_type()
+	if pack_type == "spectral" then
+		return GreenNeedle.SearchSpectralCardList, GreenNeedle.searchSpectralCardKeys, pack_type
+	elseif pack_type == "tarot" then
+		return GreenNeedle.SearchTarotCardList, GreenNeedle.searchTarotCardKeys, pack_type
+	elseif pack_type == "planet" then
+		return GreenNeedle.SearchPlanetCardList, GreenNeedle.searchPlanetCardKeys, pack_type
+	elseif pack_type == "joker" then
+		return GreenNeedle.build_buffoon_lookup(), GreenNeedle.build_buffoon_selector_keys(), pack_type
+	end
+	return {}, {}, nil
+end
+
+-- Reset shop Judgement settings if Judgement is no longer selected as a pack card
+local function reset_shop_judgement_if_needed(s)
+	local has_judgement = false
+	local pack_type = GreenNeedle.get_pack_card_type()
+	if pack_type == "tarot" then
+		has_judgement = (s.searchPackCard1 or "") == "c_judgement" or (s.searchPackCard2 or "") == "c_judgement"
+	end
+	if not has_judgement then
+		s.searchShopJudgementJoker = ""
+		s.searchShopJudgementJokerID = 2
+		s.searchShopJudgementPage = 1
+		s.searchShopJudgementEdition = ""
+		s.searchShopJudgementEditionID = 1
+	end
+end
+
 G.FUNCS.gn_change_search_pack_card1 = function(x)
 	local s = GreenNeedle.SETTINGS.autoreroll
 	s.searchPackCard1ID = x.to_key
-	local pack_type = GreenNeedle.get_pack_card_type()
-	local lookup = pack_type == "spectral" and GreenNeedle.SearchSpectralCardList or GreenNeedle.SearchTarotCardList
-	local keys = pack_type == "spectral" and GreenNeedle.searchSpectralCardKeys or GreenNeedle.searchTarotCardKeys
-	if pack_type == "spectral" then
-		s.searchPackCard1 = GreenNeedle.SearchSpectralCardList[x.to_val]
-	else
-		s.searchPackCard1 = GreenNeedle.SearchTarotCardList[x.to_val]
-	end
+	local lookup, keys, pack_type = pack_card_lookup_and_keys()
+	s.searchPackCard1 = lookup[x.to_val] or ""
 	-- Fix card 2 index for the new exclusion list
 	s.searchPackCard2ID = fix_card2_index(s.searchPackCard2, lookup, keys, x.to_val)
 	-- Only reset wraith if wraith is no longer selected in either card slot
@@ -245,6 +330,7 @@ G.FUNCS.gn_change_search_pack_card1 = function(x)
 		s.searchWraithEdition = ""
 		s.searchWraithEditionID = 1
 	end
+	reset_shop_judgement_if_needed(s)
 	reset_legendary_if_no_soul()
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
 	GreenNeedle.refresh_settings_tab()
@@ -310,17 +396,54 @@ G.FUNCS.gn_change_search_judgement_joker = function(x)
 	GreenNeedle.update_estimate_text()
 end
 
+G.FUNCS.gn_change_search_shop_judgement_edition = function(x)
+	GreenNeedle.SETTINGS.autoreroll.searchShopJudgementEditionID = x.to_key
+	GreenNeedle.SETTINGS.autoreroll.searchShopJudgementEdition = GreenNeedle.SearchWraithEditionList[x.to_val]
+	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
+	GreenNeedle.update_estimate_text()
+end
+
+G.FUNCS.gn_change_search_shop_judgement_joker = function(x)
+	local s = GreenNeedle.SETTINGS.autoreroll
+	local page = s.searchShopJudgementPage or 1
+	local total_pages = GreenNeedle.judgement_page_count()
+	local options, lookup = GreenNeedle.build_judgement_selector(page)
+
+	if x.to_key == 1 then
+		local new_page = page - 1
+		if new_page < 1 then new_page = total_pages end
+		s.searchShopJudgementPage = new_page
+		local new_opts, new_lookup = GreenNeedle.build_judgement_selector(new_page)
+		s.searchShopJudgementJokerID = #new_opts - 1
+		s.searchShopJudgementJoker = new_lookup[new_opts[s.searchShopJudgementJokerID]] or ""
+		nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
+		GreenNeedle.refresh_settings_tab()
+		return
+	end
+
+	if x.to_key == #options then
+		local new_page = page + 1
+		if new_page > total_pages then new_page = 1 end
+		s.searchShopJudgementPage = new_page
+		s.searchShopJudgementJokerID = 2
+		local new_opts, new_lookup = GreenNeedle.build_judgement_selector(new_page)
+		s.searchShopJudgementJoker = new_lookup[new_opts[2]] or ""
+		nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
+		GreenNeedle.refresh_settings_tab()
+		return
+	end
+
+	s.searchShopJudgementJokerID = x.to_key
+	s.searchShopJudgementJoker = lookup[x.to_val] or ""
+	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
+	GreenNeedle.update_estimate_text()
+end
+
 G.FUNCS.gn_change_search_pack_card2 = function(x)
 	local s = GreenNeedle.SETTINGS.autoreroll
 	s.searchPackCard2ID = x.to_key
-	local pack_type = GreenNeedle.get_pack_card_type()
-	local lookup = pack_type == "spectral" and GreenNeedle.SearchSpectralCardList or GreenNeedle.SearchTarotCardList
-	local keys = pack_type == "spectral" and GreenNeedle.searchSpectralCardKeys or GreenNeedle.searchTarotCardKeys
-	if pack_type == "spectral" then
-		s.searchPackCard2 = GreenNeedle.SearchSpectralCardList[x.to_val]
-	else
-		s.searchPackCard2 = GreenNeedle.SearchTarotCardList[x.to_val]
-	end
+	local lookup, keys = pack_card_lookup_and_keys()
+	s.searchPackCard2 = lookup[x.to_val] or ""
 	-- Fix card 1 index for the new exclusion list
 	s.searchPackCard1ID = fix_card2_index(s.searchPackCard1, lookup, keys, x.to_val)
 	-- Only reset wraith if wraith is no longer selected in either card slot
@@ -331,9 +454,99 @@ G.FUNCS.gn_change_search_pack_card2 = function(x)
 		s.searchWraithEdition = ""
 		s.searchWraithEditionID = 1
 	end
+	reset_shop_judgement_if_needed(s)
 	reset_legendary_if_no_soul()
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
 	GreenNeedle.refresh_settings_tab()
+end
+
+-- Helper: build a paginated buffoon card callback (shared logic for card 1 and card 2)
+local function buffoon_card_callback(x, card_key_field, card_id_field, page_field)
+	local s = GreenNeedle.SETTINGS.autoreroll
+	local page = s[page_field] or 1
+	local total_pages = GreenNeedle.judgement_page_count()
+	local options, lookup = GreenNeedle.build_judgement_selector(page)
+
+	if x.to_key == 1 then
+		local new_page = page - 1
+		if new_page < 1 then new_page = total_pages end
+		s[page_field] = new_page
+		local new_opts, new_lookup = GreenNeedle.build_judgement_selector(new_page)
+		s[card_id_field] = #new_opts - 1
+		s[card_key_field] = new_lookup[new_opts[s[card_id_field]]] or ""
+		nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
+		GreenNeedle.refresh_settings_tab()
+		return
+	end
+
+	if x.to_key == #options then
+		local new_page = page + 1
+		if new_page > total_pages then new_page = 1 end
+		s[page_field] = new_page
+		s[card_id_field] = 2
+		local new_opts, new_lookup = GreenNeedle.build_judgement_selector(new_page)
+		s[card_key_field] = new_lookup[new_opts[2]] or ""
+		nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
+		GreenNeedle.refresh_settings_tab()
+		return
+	end
+
+	s[card_id_field] = x.to_key
+	s[card_key_field] = lookup[x.to_val] or ""
+	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
+	GreenNeedle.update_estimate_text()
+end
+
+G.FUNCS.gn_change_search_tag_joker = function(x)
+	local s = GreenNeedle.SETTINGS.autoreroll
+	local rarity = s.searchTag == "tag_rare" and 3 or 2
+	local page = s.searchTagJokerPage or 1
+	local total_pages = GreenNeedle.rarity_page_count(rarity)
+	local options, lookup = GreenNeedle.build_rarity_selector(page, rarity)
+
+	if x.to_key == 1 then
+		local new_page = page - 1
+		if new_page < 1 then new_page = total_pages end
+		s.searchTagJokerPage = new_page
+		local new_opts, new_lookup = GreenNeedle.build_rarity_selector(new_page, rarity)
+		s.searchTagJokerID = #new_opts - 1
+		s.searchTagJoker = new_lookup[new_opts[s.searchTagJokerID]] or ""
+		nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
+		GreenNeedle.refresh_settings_tab()
+		return
+	end
+
+	if x.to_key == #options then
+		local new_page = page + 1
+		if new_page > total_pages then new_page = 1 end
+		s.searchTagJokerPage = new_page
+		s.searchTagJokerID = 2
+		local new_opts, new_lookup = GreenNeedle.build_rarity_selector(new_page, rarity)
+		s.searchTagJoker = new_lookup[new_opts[2]] or ""
+		nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
+		GreenNeedle.refresh_settings_tab()
+		return
+	end
+
+	s.searchTagJokerID = x.to_key
+	s.searchTagJoker = lookup[x.to_val] or ""
+	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
+	GreenNeedle.update_estimate_text()
+end
+
+G.FUNCS.gn_change_search_buffoon_card1 = function(x)
+	buffoon_card_callback(x, "searchPackCard1", "searchPackCard1ID", "searchBuffoonCard1Page")
+end
+
+G.FUNCS.gn_change_search_buffoon_card2 = function(x)
+	buffoon_card_callback(x, "searchPackCard2", "searchPackCard2ID", "searchBuffoonCard2Page")
+end
+
+G.FUNCS.gn_change_search_buffoon_edition = function(x)
+	GreenNeedle.SETTINGS.autoreroll.searchBuffoonEditionID = x.to_key
+	GreenNeedle.SETTINGS.autoreroll.searchBuffoonEdition = GreenNeedle.SearchWraithEditionList[x.to_val]
+	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
+	GreenNeedle.update_estimate_text()
 end
 
 -- Helper: determine the number of card slots for the currently selected shop pack variant
@@ -344,9 +557,13 @@ function GreenNeedle.get_pack_slot_count()
 	if first:find("normal") then
 		if first:find("arcana") then return 3 end
 		if first:find("spectral") then return 2 end
+		if first:find("celestial") then return 3 end
+		if first:find("buffoon") then return 2 end
 	end
 	if first:find("arcana") then return 5 end
 	if first:find("spectral") then return 4 end
+	if first:find("celestial") then return 5 end
+	if first:find("buffoon") then return 4 end
 	return 0
 end
 
@@ -357,6 +574,8 @@ function GreenNeedle.get_pack_card_type()
 		local first = s.searchPack[1]
 		if first:find("spectral") then return "spectral"
 		elseif first:find("arcana") then return "tarot"
+		elseif first:find("celestial") then return "planet"
+		elseif first:find("buffoon") then return "joker"
 		end
 	end
 	return nil
@@ -519,6 +738,7 @@ end
 
 -- Predict which booster pack appears in a given shop slot
 function GreenNeedle.predict_pack(seed, slot)
+	GreenNeedle.dump_booster_pool()
 	if slot == 1 then return "p_buffoon_normal_1" end
 	local pseed = GreenNeedle.pseudoseed("shop_pack1", seed)
 	math.randomseed(pseed)
@@ -530,7 +750,11 @@ function GreenNeedle.predict_pack(seed, slot)
 	local cumulative = 0
 	for k, v in ipairs(G.P_CENTER_POOLS['Booster']) do
 		cumulative = cumulative + (v.weight or 1)
-		if cumulative >= poll then return v.key end
+		if cumulative >= poll then
+			print(string.format("[GN] predict_pack(%s, %d): pseed=%.17f poll=%.6f/%.6f -> %s (weight=%.2f, cum=%.6f)",
+				seed, slot, pseed, poll, total_weight, v.key, v.weight or 1, cumulative))
+			return v.key
+		end
 	end
 	return G.P_CENTER_POOLS['Booster'][#G.P_CENTER_POOLS['Booster']].key
 end
@@ -645,6 +869,90 @@ function GreenNeedle.check_tarot_card(seed, key_append, ante, pack_size, target_
 	return false
 end
 
+-- Check if a specific planet card appears in a celestial pack
+-- Planet packs use soul_Planet for c_black_hole check (0.003/slot)
+function GreenNeedle.check_planet_card(seed, key_append, ante, pack_size, target_card)
+	ante = ante or 1
+	pack_size = pack_size or 5
+	local soul_key = "soul_Planet" .. ante
+	local card_key = "Planet" .. key_append .. ante
+
+	local pool = {}
+	if G.P_CENTER_POOLS and G.P_CENTER_POOLS["Planet"] then
+		for k, v in ipairs(G.P_CENTER_POOLS["Planet"]) do
+			pool[#pool + 1] = v.key
+		end
+	end
+	if #pool == 0 then return false end
+
+	local card_advance = 0
+	for slot = 1, pack_size do
+		local soul_pseed = GreenNeedle.pseudoseed_advance(soul_key, seed, slot)
+		math.randomseed(soul_pseed)
+		if math.random() > 0.997 then
+			if target_card == "c_black_hole" then return true end
+		else
+			card_advance = card_advance + 1
+			local pseed = GreenNeedle.pseudoseed_advance(card_key, seed, card_advance)
+			math.randomseed(pseed)
+			local idx = math.random(#pool)
+			if pool[idx] == target_card then return true end
+		end
+	end
+	return false
+end
+
+-- Check if a specific joker appears in a buffoon pack
+-- Buffoon packs use create_card("Joker", ..., nil, nil, true, true, nil, 'buf')
+-- Rarity is determined by pseudorandom('rarity' .. ante .. 'buf')
+-- Then joker is pseudorandom_element(pool, pseudoseed('Joker' .. rarity .. 'buf'))
+function GreenNeedle.check_joker_card(seed, key_append, ante, pack_size, target_joker, target_edition)
+	ante = ante or 1
+	pack_size = pack_size or 4
+	key_append = key_append or "buf"
+	local want_joker = target_joker and target_joker ~= ""
+	local want_edition = target_edition and target_edition ~= ""
+
+	-- Track advances per pool key across slots
+	local pool_advances = {}
+	local edi_key = "edi" .. key_append .. ante
+
+	for slot = 1, pack_size do
+		-- Determine rarity for this slot
+		local rarity_key = "rarity" .. ante .. key_append
+		local rarity_pseed = GreenNeedle.pseudoseed_advance(rarity_key, seed, slot)
+		math.randomseed(rarity_pseed)
+		local rarity_roll = math.random()
+		local rarity = (rarity_roll > 0.95 and 3) or (rarity_roll > 0.7 and 2) or 1
+
+		local pool = G.P_JOKER_RARITY_POOLS and G.P_JOKER_RARITY_POOLS[rarity]
+		if pool and #pool > 0 then
+			local pool_key = "Joker" .. rarity .. key_append
+			pool_advances[pool_key] = (pool_advances[pool_key] or 0) + 1
+			local pseed = GreenNeedle.pseudoseed_advance(pool_key, seed, pool_advances[pool_key])
+			math.randomseed(pseed)
+			local idx = math.random(#pool)
+			local joker_match = not want_joker or (pool[idx] and pool[idx].key == target_joker)
+
+			if joker_match and want_edition then
+				local edi_pseed = GreenNeedle.pseudoseed_advance(edi_key, seed, slot)
+				math.randomseed(edi_pseed)
+				local poll = math.random()
+				local edi = ""
+				if poll > 0.997 then edi = "e_negative"
+				elseif poll > 1.0 - 0.006 then edi = "e_polychrome"
+				elseif poll > 1.0 - 0.02 then edi = "e_holographic"
+				elseif poll > 1.0 - 0.04 then edi = "e_foil"
+				end
+				if edi == target_edition then return true end
+			elseif joker_match then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 -- Rare joker pool (order-sorted, must match RARE_JOKER_POOL in greenneedle.c)
 GreenNeedle.RARE_JOKER_POOL = {
 	"j_dna", "j_vagabond", "j_baron", "j_obelisk", "j_baseball",
@@ -753,6 +1061,55 @@ end
 -- Page 2+: [...] [joker1] ... [jokerN] [... ]
 -- Sentinels at positions 1 and #options trigger page flips.
 -- Returns: options (string list), lookup (label → joker key)
+-- Build a joker list filtered by rarity (2 = uncommon, 3 = rare)
+function GreenNeedle.build_rarity_joker_list(rarity)
+	local list = {}
+	local pool = G.P_JOKER_RARITY_POOLS and G.P_JOKER_RARITY_POOLS[rarity]
+	if pool then
+		for _, v in ipairs(pool) do
+			if v.key and v.name and v.key ~= "j_cavendish" and v.unlocked ~= false then
+				list[#list + 1] = {key = v.key, name = v.name}
+			end
+		end
+	end
+	table.sort(list, function(a, b)
+		local an = a.name:lower():gsub("^the ", "")
+		local bn = b.name:lower():gsub("^the ", "")
+		return an < bn
+	end)
+	return list
+end
+
+function GreenNeedle.rarity_page_count(rarity)
+	local list = GreenNeedle.build_rarity_joker_list(rarity)
+	return math.max(1, math.ceil(#list / GreenNeedle.JUDGEMENT_PAGE_SIZE))
+end
+
+-- Build a paginated selector for jokers of a specific rarity
+function GreenNeedle.build_rarity_selector(page, rarity)
+	page = page or 1
+	local list = GreenNeedle.build_rarity_joker_list(rarity)
+	local ps = GreenNeedle.JUDGEMENT_PAGE_SIZE
+	local total_pages = math.max(1, math.ceil(#list / ps))
+	if page > total_pages then page = total_pages end
+	local start_idx = (page - 1) * ps + 1
+	local end_idx = math.min(page * ps, #list)
+
+	local options = {"..."}  -- slot 1: prev sentinel
+	local lookup = {["..."] = "", ["... "] = ""}
+	if page == 1 then
+		options[#options + 1] = "Any"
+		lookup["Any"] = ""
+	end
+	for i = start_idx, end_idx do
+		local entry = list[i]
+		options[#options + 1] = entry.name
+		lookup[entry.name] = entry.key
+	end
+	options[#options + 1] = "... "  -- last slot: next sentinel
+	return options, lookup
+end
+
 function GreenNeedle.build_judgement_selector(page)
 	page = page or 1
 	local list = GreenNeedle.build_judgement_joker_list()
@@ -811,6 +1168,26 @@ function GreenNeedle.predict_judgement_joker(seed, ante)
 	local pool = G.P_JOKER_RARITY_POOLS[rarity]
 	if not pool or #pool == 0 then return nil end
 	local pool_key = "Joker" .. rarity .. "jud" .. ante
+	local pseed = GreenNeedle.pseudoseed(pool_key, seed)
+	math.randomseed(pseed)
+	local idx = math.random(#pool)
+	return pool[idx].key
+end
+
+-- Predict the joker created by Uncommon Tag or Rare Tag.
+-- Uncommon: forced rarity 2, key_append 'uta'
+-- Rare:     forced rarity 3, key_append 'rta'
+function GreenNeedle.predict_tag_joker(seed, ante, tag_key)
+	ante = ante or 1
+	local rarity, key_append
+	if tag_key == "tag_rare" then
+		rarity = 3; key_append = "rta"
+	else
+		rarity = 2; key_append = "uta"
+	end
+	local pool = G.P_JOKER_RARITY_POOLS[rarity]
+	if not pool or #pool == 0 then return nil end
+	local pool_key = "Joker" .. rarity .. key_append .. ante
 	local pseed = GreenNeedle.pseudoseed(pool_key, seed)
 	math.randomseed(pseed)
 	local idx = math.random(#pool)
@@ -926,6 +1303,42 @@ function GreenNeedle.estimate_search_seeds()
 		end
 	end
 
+	local function planet_card_prob(card, slots, is_second)
+		if card == "c_black_hole" then
+			return 1 - 0.997^slots
+		end
+		-- 12 base planets (some softlocked), approximate with full pool
+		local pool_size = 12
+		local effective = is_second and (pool_size - 1) or pool_size
+		return 1 - (effective / (pool_size + 1))^slots
+	end
+	local function joker_card_prob(card, slots, is_second)
+		-- Determine rarity and pool size from runtime pools
+		-- Rarity chances per slot: Common 70%, Uncommon 25%, Rare 5%
+		local rarity_chance = {0.70, 0.25, 0.05}
+		local rarity = 1
+		local pool_size = 60 -- fallback
+		if G.P_JOKER_RARITY_POOLS then
+			for r = 1, 3 do
+				local pool = G.P_JOKER_RARITY_POOLS[r]
+				if pool then
+					for _, v in ipairs(pool) do
+						if v.key == card then
+							rarity = r
+							pool_size = #pool
+							goto found
+						end
+					end
+				end
+			end
+		end
+		::found::
+		-- P(target in at least one slot) = 1 - P(miss all slots)
+		-- P(miss one slot) = 1 - rarity_chance * (1/pool_size)
+		local per_slot = rarity_chance[rarity] * (1 / pool_size)
+		return 1 - (1 - per_slot)^slots
+	end
+
 	-- Pack card filters (use dynamic slot count based on selected pack variant)
 	if s.searchPack and #s.searchPack > 0 and pack_type then
 		local slots = GreenNeedle.get_pack_slot_count()
@@ -947,6 +1360,30 @@ function GreenNeedle.estimate_search_seeds()
 				prob = prob * tarot_card_prob(s.searchPackCard2, slots, true)
 				any_filter = true
 			end
+		elseif pack_type == "planet" then
+			if s.searchPackCard1 and s.searchPackCard1 ~= "" then
+				prob = prob * planet_card_prob(s.searchPackCard1, slots, false)
+				any_filter = true
+			end
+			if s.searchPackCard2 and s.searchPackCard2 ~= "" then
+				prob = prob * planet_card_prob(s.searchPackCard2, slots, true)
+				any_filter = true
+			end
+		elseif pack_type == "joker" then
+			if s.searchPackCard1 and s.searchPackCard1 ~= "" then
+				prob = prob * joker_card_prob(s.searchPackCard1, slots, false)
+				any_filter = true
+			end
+			if s.searchPackCard2 and s.searchPackCard2 ~= "" then
+				prob = prob * joker_card_prob(s.searchPackCard2, slots, true)
+				any_filter = true
+			end
+			if s.searchBuffoonEdition and s.searchBuffoonEdition ~= "" then
+				local edi_probs = {e_foil = 0.04, e_holographic = 0.02, e_polychrome = 0.006, e_negative = 0.003}
+				local edi_p = edi_probs[s.searchBuffoonEdition] or 0.04
+				prob = prob * (1 - (1 - edi_p)^slots)
+				any_filter = true
+			end
 		end
 	end
 
@@ -965,6 +1402,16 @@ function GreenNeedle.estimate_search_seeds()
 	-- Legendary joker: 1/5 pool
 	if s.searchLegendary and s.searchLegendary ~= "" then
 		prob = prob * (1 / 5)
+		any_filter = true
+	end
+
+	-- Tag joker (Uncommon/Rare Tag): forced rarity, 1/pool_size
+	if s.searchTagJoker and s.searchTagJoker ~= "" and
+	   (s.searchTag == "tag_uncommon" or s.searchTag == "tag_rare") then
+		local rarity = s.searchTag == "tag_rare" and 3 or 2
+		local pool = G.P_JOKER_RARITY_POOLS and G.P_JOKER_RARITY_POOLS[rarity]
+		local pool_size = pool and #pool or 20
+		prob = prob * (1 / pool_size)
 		any_filter = true
 	end
 
@@ -1025,6 +1472,42 @@ function GreenNeedle.estimate_search_seeds()
 		end
 	end
 
+	-- Shop Judgement joker (only when Judgement is a selected shop pack card in Arcana)
+	if s.searchShopJudgementJoker and s.searchShopJudgementJoker ~= "" then
+		local has_judgement = pack_type == "tarot" and
+			((s.searchPackCard1 or "") == "c_judgement" or (s.searchPackCard2 or "") == "c_judgement")
+		if has_judgement then
+			local rarity_prob = {[1] = 0.70, [2] = 0.25, [3] = 0.05}
+			local jp = 0
+			for r = 1, 3 do
+				local pool = G.P_JOKER_RARITY_POOLS and G.P_JOKER_RARITY_POOLS[r]
+				if pool then
+					for _, v in ipairs(pool) do
+						if v.key == s.searchShopJudgementJoker then
+							jp = rarity_prob[r] * (1 / #pool)
+							break
+						end
+					end
+				end
+				if jp > 0 then break end
+			end
+			if jp == 0 then jp = 0.01 end
+			prob = prob * jp
+			any_filter = true
+		end
+	end
+
+	-- Shop Judgement edition
+	if s.searchShopJudgementEdition and s.searchShopJudgementEdition ~= "" then
+		local has_judgement = pack_type == "tarot" and
+			((s.searchPackCard1 or "") == "c_judgement" or (s.searchPackCard2 or "") == "c_judgement")
+		if has_judgement then
+			local ep = EDITION_PROBS[s.searchShopJudgementEdition] or 0.04
+			prob = prob * ep
+			any_filter = true
+		end
+	end
+
 	if not any_filter then return 0 end
 	return math.ceil(1 / prob)
 end
@@ -1052,6 +1535,7 @@ function GreenNeedle.auto_reroll()
 		print("[GN]   wraithJoker=" .. (s.searchWraithJoker or ""))
 		print("[GN]   wraithEdition=" .. (s.searchWraithEdition or ""))
 		print("[GN]   judgementJoker=" .. (s.searchJudgementJoker or "") .. " judgementEdition=" .. (s.searchJudgementEdition or ""))
+		print("[GN]   tagJoker=" .. (s.searchTagJoker or ""))
 		print("[GN]   native=" .. tostring(GreenNeedle.native ~= nil and not GreenNeedle.SETTINGS.force_lua_search))
 	end
 
@@ -1124,6 +1608,40 @@ function GreenNeedle.auto_reroll()
 			end
 		end
 
+		-- Planet card filters (celestial packs)
+		local planet_card_arg = ""
+		local planet_card2_arg = ""
+		local planet_key_append = "pl1"
+		local planet_pack_size = 5
+		if s.searchPack and #s.searchPack > 0 and GreenNeedle.get_pack_card_type() == "planet" then
+			planet_pack_size = pack_slot_count
+			if s.searchPackCard1 and s.searchPackCard1 ~= "" then
+				planet_card_arg = s.searchPackCard1
+			end
+			if s.searchPackCard2 and s.searchPackCard2 ~= "" then
+				planet_card2_arg = s.searchPackCard2
+			end
+		end
+
+		-- Joker card filters (buffoon packs)
+		local joker_card_arg = ""
+		local joker_card2_arg = ""
+		local joker_key_append = "buf"
+		local joker_pack_size = 4
+		local joker_edition_arg = ""
+		if s.searchPack and #s.searchPack > 0 and GreenNeedle.get_pack_card_type() == "joker" then
+			joker_pack_size = pack_slot_count
+			if s.searchPackCard1 and s.searchPackCard1 ~= "" then
+				joker_card_arg = s.searchPackCard1
+			end
+			if s.searchPackCard2 and s.searchPackCard2 ~= "" then
+				joker_card2_arg = s.searchPackCard2
+			end
+			if s.searchBuffoonEdition and s.searchBuffoonEdition ~= "" then
+				joker_edition_arg = s.searchBuffoonEdition
+			end
+		end
+
 		local voucher2_arg = s.searchVoucher2 or ""
 
 		-- Wraith joker filter (only when Wraith is a selected spectral pack card)
@@ -1142,11 +1660,20 @@ function GreenNeedle.auto_reroll()
 		end
 		local rare_joker_mask = GreenNeedle.build_rare_joker_mask()
 
-		-- Judgement joker filter (only when Judgement is a selected tag card)
+		-- Tag joker filter (Uncommon/Rare tag)
+		local tag_joker_arg = ""
+		if (s.searchTag == "tag_uncommon" or s.searchTag == "tag_rare") and
+		   s.searchTagJoker and s.searchTagJoker ~= "" then
+			tag_joker_arg = s.searchTagJoker
+		end
+
+		-- Judgement joker filter (tag or shop pack Judgement)
 		local judgement_joker_arg = ""
 		local judgement_edition_arg = ""
 		local has_judgement_tag = s.searchTag == "tag_charm" and
 			((s.searchTagCard1 or "") == "c_judgement" or (s.searchTagCard2 or "") == "c_judgement")
+		local has_judgement_pack = GreenNeedle.get_pack_card_type() == "tarot" and
+			((s.searchPackCard1 or "") == "c_judgement" or (s.searchPackCard2 or "") == "c_judgement")
 		if has_judgement_tag then
 			if s.searchJudgementJoker and s.searchJudgementJoker ~= "" then
 				judgement_joker_arg = s.searchJudgementJoker
@@ -1155,9 +1682,18 @@ function GreenNeedle.auto_reroll()
 				judgement_edition_arg = s.searchJudgementEdition
 			end
 		end
+		if has_judgement_pack then
+			if judgement_joker_arg == "" and s.searchShopJudgementJoker and s.searchShopJudgementJoker ~= "" then
+				judgement_joker_arg = s.searchShopJudgementJoker
+			end
+			if judgement_edition_arg == "" and s.searchShopJudgementEdition and s.searchShopJudgementEdition ~= "" then
+				judgement_edition_arg = s.searchShopJudgementEdition
+			end
+		end
 
 		-- Log resolved native args on first search frame
 		if GreenNeedle.AUTOREROLL.autoRerollFrames == 1 then
+			GreenNeedle.dump_booster_pool()
 			print("[GN] Native args:")
 			print("[GN]   tag_arg=" .. tag_arg .. " pack_arg=" .. pack_arg)
 			print("[GN]   voucher_arg=" .. voucher_arg .. " voucher2_arg=" .. voucher2_arg)
@@ -1167,6 +1703,9 @@ function GreenNeedle.auto_reroll()
 			print("[GN]   tarot_key_append=" .. tarot_key_append .. " tarot_pack_size=" .. tarot_pack_size .. " spectral_pack_size=" .. spectral_pack_size)
 			print("[GN]   wraith_joker_arg=" .. wraith_joker_arg .. " wraith_edition_arg=" .. wraith_edition_arg)
 			print("[GN]   judgement_joker_arg=" .. judgement_joker_arg .. " judgement_edition_arg=" .. judgement_edition_arg)
+			print("[GN]   planet_card_arg=" .. planet_card_arg .. " planet_card2_arg=" .. planet_card2_arg)
+			print("[GN]   joker_card_arg=" .. joker_card_arg .. " joker_card2_arg=" .. joker_card2_arg .. " joker_edition_arg=" .. joker_edition_arg)
+			print("[GN]   tag_joker_arg=" .. tag_joker_arg)
 			print("[GN]   tag_mask=" .. tag_mask .. " rare_joker_mask=" .. rare_joker_mask)
 		end
 
@@ -1190,7 +1729,17 @@ function GreenNeedle.auto_reroll()
 			wraith_edition_arg,
 			spectral_pack_size,
 			judgement_joker_arg,
-			judgement_edition_arg
+			judgement_edition_arg,
+			planet_card_arg,
+			planet_card2_arg,
+			planet_key_append,
+			planet_pack_size,
+			joker_card_arg,
+			joker_card2_arg,
+			joker_key_append,
+			joker_pack_size,
+			joker_edition_arg,
+			tag_joker_arg
 		)
 		result = result ~= nil and GreenNeedle.ffi.string(result) or ""
 		if result ~= "" then
@@ -1261,6 +1810,15 @@ function GreenNeedle.auto_reroll()
 					if not GreenNeedle.check_tarot_card(seed_found, "ar1", 1, pslots, s.searchPackCard1) then
 						seed_found = nil
 					end
+				elseif ptype == "planet" then
+					if not GreenNeedle.check_planet_card(seed_found, "pl1", 1, pslots, s.searchPackCard1) then
+						seed_found = nil
+					end
+				elseif ptype == "joker" then
+					local buf_edi = (s.searchBuffoonEdition and s.searchBuffoonEdition ~= "") and s.searchBuffoonEdition or nil
+					if not GreenNeedle.check_joker_card(seed_found, "buf", 1, pslots, s.searchPackCard1, buf_edi) then
+						seed_found = nil
+					end
 				end
 			end
 			-- Pack card 2 (only if a pack filter is set)
@@ -1273,6 +1831,14 @@ function GreenNeedle.auto_reroll()
 					end
 				elseif ptype == "tarot" then
 					if not GreenNeedle.check_tarot_card(seed_found, "ar1", 1, pslots, s.searchPackCard2) then
+						seed_found = nil
+					end
+				elseif ptype == "planet" then
+					if not GreenNeedle.check_planet_card(seed_found, "pl1", 1, pslots, s.searchPackCard2) then
+						seed_found = nil
+					end
+				elseif ptype == "joker" then
+					if not GreenNeedle.check_joker_card(seed_found, "buf", 1, pslots, s.searchPackCard2) then
 						seed_found = nil
 					end
 				end
@@ -1312,6 +1878,14 @@ function GreenNeedle.auto_reroll()
 					end
 				end
 			end
+			-- Tag joker (Uncommon/Rare Tag)
+			if seed_found and (s.searchTag == "tag_uncommon" or s.searchTag == "tag_rare") then
+				if s.searchTagJoker and s.searchTagJoker ~= "" then
+					if GreenNeedle.predict_tag_joker(seed_found, 1, s.searchTag) ~= s.searchTagJoker then
+						seed_found = nil
+					end
+				end
+			end
 			-- Judgement joker (only when Judgement is a selected Charm Tag card)
 			if seed_found and s.searchTag == "tag_charm" and
 			   ((s.searchTagCard1 or "") == "c_judgement" or (s.searchTagCard2 or "") == "c_judgement") then
@@ -1322,6 +1896,20 @@ function GreenNeedle.auto_reroll()
 				end
 				if seed_found and s.searchJudgementEdition and s.searchJudgementEdition ~= "" then
 					if GreenNeedle.predict_judgement_edition(seed_found, 1) ~= s.searchJudgementEdition then
+						seed_found = nil
+					end
+				end
+			end
+			-- Shop Judgement joker (only when Judgement is a selected shop pack card in an Arcana pack)
+			if seed_found and GreenNeedle.get_pack_card_type() == "tarot" and
+			   ((s.searchPackCard1 or "") == "c_judgement" or (s.searchPackCard2 or "") == "c_judgement") then
+				if s.searchShopJudgementJoker and s.searchShopJudgementJoker ~= "" then
+					if GreenNeedle.predict_judgement_joker(seed_found, 1) ~= s.searchShopJudgementJoker then
+						seed_found = nil
+					end
+				end
+				if seed_found and s.searchShopJudgementEdition and s.searchShopJudgementEdition ~= "" then
+					if GreenNeedle.predict_judgement_edition(seed_found, 1) ~= s.searchShopJudgementEdition then
 						seed_found = nil
 					end
 				end
