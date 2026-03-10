@@ -1,6 +1,6 @@
 # Green Needle
 
-A [Balatro](https://www.playbalatro.com/) mod for searching game seeds that match specific criteria. Find seeds with the exact skip tag, shop pack, vouchers, legendary joker, spectral cards, and pack contents you want before starting a run. Inspired by [Brainstorm](https://github.com/OceanRamen/Brainstorm), with a native C search engine, additional search filters, and a different approach to seed prediction.
+A [Balatro](https://www.playbalatro.com/) mod for searching game seeds that match specific criteria. Find seeds with the exact skip tag, shop pack, vouchers, legendary joker, and pack contents (tarot, spectral, planet, and joker cards) you want before starting a run. Inspired by [Brainstorm](https://github.com/OceanRamen/Brainstorm), with a native C search engine, additional search filters, and a different approach to seed prediction.
 
 Requires the [Lovely](https://github.com/ethangreen-dev/lovely-injector) mod loader.
 
@@ -23,14 +23,17 @@ Requires the [Lovely](https://github.com/ethangreen-dev/lovely-injector) mod loa
 ## Features
 
 - Search for seeds matching any combination of:
-  - **Skip tag** (Charm Tag, Double Tag, etc.)
+  - **Skip tag** (Charm Tag, Double Tag, Uncommon Tag, Rare Tag, etc.)
   - **Tag pack cards** (specific tarot cards in the Charm Tag's Mega Arcana pack)
-  - **Shop pack type** (Arcana, Spectral, Buffoon, etc. — including size variants)
-  - **Shop pack cards** (specific tarot or spectral cards in the shop pack)
-  - **Spectral pack cards** (any of the 18 spectral cards, including The Soul and Black Hole)
+  - **Uncommon/Rare Tag joker** — when Uncommon or Rare Tag is selected, filter for a specific joker from the corresponding rarity pool
+  - **Shop pack type** (Arcana, Spectral, Celestial, Buffoon, etc. — including size variants)
+  - **Shop pack cards** (specific tarot, spectral, planet, or joker cards in the shop pack)
+  - **Buffoon pack joker** — paginated joker selector for buffoon packs, with rarity-aware probability estimates
+  - **Buffoon edition** — filter the edition (Foil, Holographic, Polychrome, Negative) of jokers in buffoon packs
+  - **Planet/celestial pack cards** — filter for specific planet cards in celestial packs
   - **Wraith joker** — when Wraith is selected as a shop pack card, optionally filter for a specific rare joker it creates
-  - **Wraith edition** — filter the edition (Foil, Holographic, Polychrome, Negative) of the Wraith joker
-  - **Judgement joker** — when Judgement is selected as a tag pack card, filter for a specific joker it creates (paginated selector with all unlocked jokers)
+  - **Wraith edition** — filter the edition of the Wraith joker
+  - **Judgement joker** — when Judgement is selected as a tag or shop pack card, filter for a specific joker it creates (paginated selector with all unlocked jokers)
   - **Judgement edition** — filter the edition of the Judgement joker
   - **Voucher Ante 1** (Telescope, Crystal Ball, etc.)
   - **Voucher Ante 2** (dynamically filtered based on Ante 1 selection)
