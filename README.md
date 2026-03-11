@@ -82,6 +82,10 @@ The mod works on all platforms via the pure-Lua search fallback. Pre-built nativ
 4. Press **Ctrl+A** again to stop the search
 5. When a matching seed is found, a new run starts automatically with that seed
 
+### Seeds per Frame
+
+The **Seeds/Frame** option controls how many seeds are tested per game frame. Higher values search faster but may cause the game to stutter or freeze during the search. With the native library, the default of 100K is a good balance — increase to 500K or 1M if your machine handles it smoothly, or decrease to 1K or 10K if you experience lag. The pure-Lua fallback is much slower, so lower values are recommended there.
+
 ## Building the Native Library
 
 The native search library provides dramatically faster searching. Pre-built for macOS (universal binary: Apple Silicon arm64 + Intel x86_64) and Windows (x86_64).
