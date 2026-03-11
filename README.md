@@ -1,24 +1,43 @@
 # Green Needle
 
-A [Balatro](https://www.playbalatro.com/) mod for searching game seeds that match specific criteria. Find seeds with the exact skip tag, shop pack, vouchers, legendary joker, and pack contents (tarot, spectral, planet, and joker cards) you want before starting a run. Inspired by [Brainstorm](https://github.com/OceanRamen/Brainstorm), with a native C search engine, additional search filters, and a different approach to seed prediction.
+A [Balatro](https://www.playbalatro.com/) mod for searching game seeds that match specific criteria. Find seeds with the exact skip tag, shop pack, vouchers, legendary joker, pack contents (tarot, spectral, planet, and joker cards), and erratic deck composition you want before starting a run. Inspired by [Brainstorm](https://github.com/OceanRamen/Brainstorm), with a native C search engine, additional search filters, and a different approach to seed prediction.
 
 Requires the [Lovely](https://github.com/ethangreen-dev/lovely-injector) mod loader.
 
 *Charm Tag with Judgement + The Hanged Man, Mega Arcana shop pack with The Hanged Man, filtering for a Negative Erosion from Judgement:*
 
-![Judgement joker and edition filtering](screenshots/settings1.png)
+![Judgement joker and edition filtering](screenshots/erosion-settings.png)
 
 *Charm Tag with The Soul + Temperance, Mega Spectral with Ankh, Director's Cut voucher, and Chicot legendary:*
 
-![Shop pack cards, vouchers, and legendary filtering](screenshots/settings2.png)
+![Shop pack cards, vouchers, and legendary filtering](screenshots/double-chicot-settings.png)
 
-*The Soul + Temperance in the tag pack, Mega Spectral with Immolate, Telescope + Observatory vouchers, and Perkeo legendary — estimate in yellow at ~10.3B seeds:*
+*The Soul + Temperance in the tag pack, Mega Spectral with Immolate, Telescope + Observatory vouchers, and Perkeo legendary — estimate in yellow at ~1 in 10.3B:*
 
-![Combined filters with colour-coded estimate](screenshots/settings3.png)
+![Combined filters with colour-coded estimate](screenshots/perkeo-observatory-settings.png)
 
 *The search overlay shows a running count of seeds checked vs. the estimated total, an elapsed timer, and the cumulative probability that a match should have been found by now:*
 
 ![Searching for seeds](screenshots/search.png)
+
+### Example: Wee Joker on Erratic Deck
+
+*Tag & Shop settings — Charm Tag with Judgement, filtering for Wee Joker from Judgement:*
+
+![Wee Joker tag and shop settings](screenshots/settings-wee-joker1.png)
+
+*Erratic tab — filtering for at least 12 copies of the 2 rank, with erratic estimate (~1 in 2K) and combined estimate (~1 in 60.3M):*
+
+![Wee Joker erratic deck settings](screenshots/settings-wee-joker2.png)
+
+*Search overlay showing progress against the combined estimate:*
+
+![Wee Joker search in progress](screenshots/search-wee-joker.png)
+
+*Results — the erratic deck composition and the Arcana Pack with Judgement:*
+
+![Erratic deck result](screenshots/results-wee-joker1.png)
+![Judgement in Arcana Pack](screenshots/results-wee-joker2.png)
 
 ## Features
 
@@ -35,6 +54,7 @@ Requires the [Lovely](https://github.com/ethangreen-dev/lovely-injector) mod loa
   - **Wraith edition** — filter the edition of the Wraith joker
   - **Judgement joker** — when Judgement is selected as a tag or shop pack card, filter for a specific joker it creates (paginated selector with all unlocked jokers)
   - **Judgement edition** — filter the edition of the Judgement joker
+  - **Erratic deck filtering** — on a separate tab, filter the randomized deck composition by suit counts and rank counts (e.g. at least 12 copies of the 2 rank), with independent erratic and combined seed estimates
   - **Voucher Ante 1** (Telescope, Crystal Ball, etc.)
   - **Voucher Ante 2** (dynamically filtered based on Ante 1 selection)
   - **Legendary joker** (Canio, Perkeo, etc.) — appears when The Soul is selected in any card slot

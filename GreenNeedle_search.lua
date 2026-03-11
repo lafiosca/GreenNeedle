@@ -1233,7 +1233,12 @@ local EDITION_PROBS = {
 
 -- Format a number with B/M/K suffixes for display
 function GreenNeedle.format_seed_count(n)
-	if n >= 1000000000000 then
+	if n >= 1000000000000000 then
+		-- Use scientific notation for absurdly large numbers
+		local exp = math.floor(math.log10(n))
+		local mantissa = n / 10^exp
+		return string.format("%.1fe%d", mantissa, exp)
+	elseif n >= 1000000000000 then
 		return string.format("%.1fT", n / 1000000000000)
 	elseif n >= 1000000000 then
 		return string.format("%.1fB", n / 1000000000)
@@ -1511,6 +1516,66 @@ function GreenNeedle.estimate_search_seeds()
 
 	if not any_filter then return 0 end
 	return math.ceil(1 / prob)
+end
+
+-- Compute P(min <= X <= max) for X ~ Binomial(n, p) using log-space PMF
+function GreenNeedle.binomial_range_prob(n, p, min_val, max_val)
+	if min_val <= 0 and max_val >= n then return 1.0 end
+	if min_val > n or max_val < 0 then return 0.0 end
+	min_val = math.max(min_val, 0)
+	max_val = math.min(max_val, n)
+
+	-- Precompute log-factorials
+	local logfact = {[0] = 0}
+	for i = 1, n do logfact[i] = logfact[i-1] + math.log(i) end
+
+	local logp = math.log(p)
+	local logq = math.log(1 - p)
+	local total = 0
+	for k = min_val, max_val do
+		local log_pmf = logfact[n] - logfact[k] - logfact[n-k] + k * logp + (n-k) * logq
+		total = total + math.exp(log_pmf)
+	end
+	return math.min(total, 1.0)
+end
+
+-- Estimate seeds for erratic filters only (independent binomial approximation).
+function GreenNeedle.estimate_erratic_seeds()
+	local es = GreenNeedle.SETTINGS.erratic
+	if not es then return 0 end
+	local prob = 1.0
+	local any_filter = false
+	for i = 1, 4 do
+		local rank = es["rank" .. i]
+		if rank and rank ~= "Any" then
+			local mn = math.floor((es["rank" .. i .. "Min"] or 0) + 0.5)
+			local mx = math.floor((es["rank" .. i .. "Max"] or 52) + 0.5)
+			if mn > 0 or mx < 52 then
+				prob = prob * GreenNeedle.binomial_range_prob(52, 1/13, mn, mx)
+				any_filter = true
+			end
+		end
+	end
+	for _, suit in ipairs({"clubs", "diamonds", "hearts", "spades"}) do
+		local mn = math.floor((es[suit .. "Min"] or 0) + 0.5)
+		local mx = math.floor((es[suit .. "Max"] or 52) + 0.5)
+		if mn > 0 or mx < 52 then
+			prob = prob * GreenNeedle.binomial_range_prob(52, 1/4, mn, mx)
+			any_filter = true
+		end
+	end
+	if not any_filter then return 0 end
+	return math.ceil(1 / prob)
+end
+
+-- Combined estimate: tag/shop * erratic (independent probabilities)
+function GreenNeedle.estimate_combined_seeds()
+	local tag_shop = GreenNeedle.estimate_search_seeds()
+	local erratic = GreenNeedle.estimate_erratic_seeds()
+	if tag_shop <= 0 and erratic <= 0 then return 0 end
+	if tag_shop <= 0 then return erratic end
+	if erratic <= 0 then return tag_shop end
+	return math.ceil(tag_shop * erratic)
 end
 
 -- ---------------------------------------------------------------------------
@@ -2088,6 +2153,7 @@ end
 -- Save callback for sliders (sliders write directly to ref_table, just need to persist)
 G.FUNCS.gn_erratic_save = function(rt)
 	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
+	GreenNeedle.update_estimate_text()
 end
 
 -- Refresh the erratic tab content
@@ -2223,6 +2289,7 @@ for i = 1, 4 do
 			s["rank" .. i .. "Max"] = 52
 		end
 		nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
+		GreenNeedle.update_estimate_text()
 		GreenNeedle.refresh_erratic_tab()
 	end
 end

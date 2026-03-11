@@ -43,7 +43,7 @@ function GreenNeedle.update(dt)
 		if GreenNeedle.AUTOREROLL.autoRerollFrames == 0 then
 			GreenNeedle.AUTOREROLL.seedsSearched = 0
 			GreenNeedle.AUTOREROLL.searchStartTime = os.time()
-			GreenNeedle.AUTOREROLL.searchEstimate = GreenNeedle.estimate_search_seeds()
+			GreenNeedle.AUTOREROLL.searchEstimate = GreenNeedle.estimate_combined_seeds()
 			GreenNeedle.AUTOREROLL.displayText = GreenNeedle.AUTOREROLL.displayText or {}
 			GreenNeedle.AUTOREROLL.timerDisplayText = GreenNeedle.AUTOREROLL.timerDisplayText or {}
 			local est = GreenNeedle.AUTOREROLL.searchEstimate

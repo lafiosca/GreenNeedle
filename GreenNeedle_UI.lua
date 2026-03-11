@@ -430,7 +430,7 @@ local function estimate_colour(est)
 	if est <= 0 then
 		return G.C.WHITE
 	elseif est >= 1000000000000 then
-		return G.C.RED
+		return {1, 0, 0, 1}
 	elseif est <= 1000000000 then
 		local t = est / 1000000000
 		return {1, 1, 1 - t, 1}
@@ -676,11 +676,11 @@ function GreenNeedle.tag_shop_panel()
 				GreenNeedle._estimateDisplayText = GreenNeedle._estimateDisplayText or {}
 				local max_seeds = 2251875390625 -- 35^8
 				if est > max_seeds then
-					GreenNeedle._estimateDisplayText.value = "Est. ~" .. GreenNeedle.format_seed_count(est) .. " seeds (unlikely)"
+					GreenNeedle._estimateDisplayText.value = "Est. 1 in " .. GreenNeedle.format_seed_count(est) .. " (unlikely)"
 				elseif est > 0 then
-					GreenNeedle._estimateDisplayText.value = "Est. ~" .. GreenNeedle.format_seed_count(est) .. " seeds"
+					GreenNeedle._estimateDisplayText.value = "Est. 1 in " .. GreenNeedle.format_seed_count(est)
 				else
-					GreenNeedle._estimateDisplayText.value = ""
+					GreenNeedle._estimateDisplayText.value = "Est. 1 in 1"
 				end
 				local est_colour = estimate_colour(est)
 				GreenNeedle._estimateColour = GreenNeedle._estimateColour or {1, 1, 1, 1}
@@ -718,31 +718,64 @@ end
 -- Erratic deck search selectors
 local erraticRankKeys = {"Any", "2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King", "Ace"}
 
--- Helper: build a slider pair (min + max) for an erratic count filter
+-- Helper: wrap a bare slider (no label) with a dynamic label above it
+local function labeled_slider(label_ref, slider_node)
+	return {n=G.UIT.R, config={align = "cm", minh = 1, minw = 1, padding = 0.035, colour = G.C.CLEAR}, nodes={
+		{n=G.UIT.R, config={align = "cm", padding = 0}, nodes={
+			{n=G.UIT.T, config={ref_table = label_ref, ref_value = "value", scale = 0.35, colour = G.C.UI.TEXT_LIGHT}},
+		}},
+		{n=G.UIT.R, config={align = "cm", padding = 0}, nodes={
+			slider_node,
+		}},
+	}}
+end
+
+-- Helper: build a slider pair (min + max) for an erratic count filter.
+-- If the user drags one past the other, the two swap roles.
 local function erratic_slider_pair(label, ref_table, min_key, max_key, callback)
+	local top_args = {
+		w = 3, h = 0.3,
+		ref_table = ref_table, ref_value = min_key,
+		min = 0, max = 52, decimal_places = 0,
+	}
+	local bot_args = {
+		w = 3, h = 0.3,
+		ref_table = ref_table, ref_value = max_key,
+		min = 0, max = 52, decimal_places = 0,
+	}
+	local top_label = {value = "Min " .. label}
+	local bot_label = {value = "Max " .. label}
+	local function maybe_swap()
+		local mn = math.floor((ref_table[min_key] or 0) + 0.5)
+		local mx = math.floor((ref_table[max_key] or 52) + 0.5)
+		-- Swap if min > max, or if equal and top slider is currently the max
+		if mn > mx or (mn == mx and top_args.ref_value == max_key) then
+			ref_table[min_key] = mx
+			ref_table[max_key] = mn
+			-- Swap which key each slider writes to
+			top_args.ref_value, bot_args.ref_value = bot_args.ref_value, top_args.ref_value
+			-- Update displayed number text
+			top_args.text = string.format("%.0f", ref_table[top_args.ref_value])
+			bot_args.text = string.format("%.0f", ref_table[bot_args.ref_value])
+			-- Swap labels
+			top_label.value, bot_label.value = bot_label.value, top_label.value
+		end
+	end
+	local cb_top = "gn_erratic_" .. min_key
+	local cb_bot = "gn_erratic_" .. max_key
+	G.FUNCS[cb_top] = function(rt)
+		maybe_swap()
+		G.FUNCS[callback](rt)
+	end
+	G.FUNCS[cb_bot] = function(rt)
+		maybe_swap()
+		G.FUNCS[callback](rt)
+	end
+	top_args.callback = cb_top
+	bot_args.callback = cb_bot
 	return {
-		create_slider({
-			label = "Min " .. label,
-			label_scale = 0.35,
-			w = 3,
-			h = 0.3,
-			ref_table = ref_table,
-			ref_value = min_key,
-			min = 0,
-			max = 52,
-			callback = callback,
-		}),
-		create_slider({
-			label = "Max " .. label,
-			label_scale = 0.35,
-			w = 3,
-			h = 0.3,
-			ref_table = ref_table,
-			ref_value = max_key,
-			min = 0,
-			max = 52,
-			callback = callback,
-		}),
+		labeled_slider(top_label, create_slider(top_args)),
+		labeled_slider(bot_label, create_slider(bot_args)),
 	}
 end
 
@@ -807,6 +840,33 @@ local function erratic_rank_block(s, i)
 	return nodes
 end
 
+-- Helper: format an estimate value into text and colour
+local function format_estimate(est)
+	local max_seeds = 2251875390625 -- 35^8
+	local text
+	if est > max_seeds then
+		text = "Est. 1 in " .. GreenNeedle.format_seed_count(est) .. " (unlikely)"
+	elseif est > 0 then
+		text = "Est. 1 in " .. GreenNeedle.format_seed_count(est)
+	else
+		text = "Est. 1 in 1"
+	end
+	return text, estimate_colour(est)
+end
+
+-- Helper: update a text/colour ref pair in-place
+local function update_estimate_ref(text_ref, colour_ref, est)
+	if not text_ref then return end
+	local text, colour = format_estimate(est)
+	text_ref.value = text
+	if colour_ref then
+		colour_ref[1] = colour[1]
+		colour_ref[2] = colour[2]
+		colour_ref[3] = colour[3]
+		colour_ref[4] = colour[4]
+	end
+end
+
 -- Green Needle "Erratic" tab definition
 function GreenNeedle.erratic_panel()
 	local s = GreenNeedle.SETTINGS.erratic
@@ -827,35 +887,81 @@ function GreenNeedle.erratic_panel()
 		if not s[suit .. "Max"] then s[suit .. "Max"] = 52 end
 	end
 
-	-- Column 1: Rank 1 + spacer + Rank 3
+	-- Column 1: All four suits
 	local col1_nodes = {}
-	local r1 = erratic_rank_block(s, 1)
-	for _, n in ipairs(r1) do col1_nodes[#col1_nodes + 1] = n end
-	col1_nodes[#col1_nodes + 1] = {n=G.UIT.R, config={align = "cm", minh = 1.0, colour = G.C.CLEAR}, nodes={}}
-	local r3 = erratic_rank_block(s, 3)
-	for _, n in ipairs(r3) do col1_nodes[#col1_nodes + 1] = n end
-
-	-- Column 2: Rank 2 + spacer + Rank 4
-	local col2_nodes = {}
-	local r2 = erratic_rank_block(s, 2)
-	for _, n in ipairs(r2) do col2_nodes[#col2_nodes + 1] = n end
-	col2_nodes[#col2_nodes + 1] = {n=G.UIT.R, config={align = "cm", minh = 1.0, colour = G.C.CLEAR}, nodes={}}
-	local r4 = erratic_rank_block(s, 4)
-	for _, n in ipairs(r4) do col2_nodes[#col2_nodes + 1] = n end
-
-	-- Column 3: All four suits
-	local col3_nodes = {}
 	local suits = {"clubs", "diamonds", "hearts", "spades"}
 	for si, suit in ipairs(suits) do
 		local label = suit:sub(1,1):upper() .. suit:sub(2)
 		local sliders = erratic_slider_pair(label, s, suit .. "Min", suit .. "Max", "gn_erratic_save")
 		for _, sl in ipairs(sliders) do
-			col3_nodes[#col3_nodes + 1] = sl
+			col1_nodes[#col1_nodes + 1] = sl
 		end
 		if si < #suits then
-			col3_nodes[#col3_nodes + 1] = {n=G.UIT.R, config={align = "cm", minh = 0.25, colour = G.C.CLEAR}, nodes={}}
+			col1_nodes[#col1_nodes + 1] = {n=G.UIT.R, config={align = "cm", minh = 0.25, colour = G.C.CLEAR}, nodes={}}
 		end
 	end
+
+	-- Column 2: Rank 1 + spacer + Rank 3 + erratic-only estimate
+	local col2_nodes = {}
+	local r1 = erratic_rank_block(s, 1)
+	for _, n in ipairs(r1) do col2_nodes[#col2_nodes + 1] = n end
+	col2_nodes[#col2_nodes + 1] = {n=G.UIT.R, config={align = "cm", minh = 1.0, colour = G.C.CLEAR}, nodes={}}
+	local r3 = erratic_rank_block(s, 3)
+	for _, n in ipairs(r3) do col2_nodes[#col2_nodes + 1] = n end
+
+	-- Erratic-only estimate at bottom of col 2
+	local erratic_est = GreenNeedle.estimate_erratic_seeds()
+	GreenNeedle._erraticEstText = GreenNeedle._erraticEstText or {}
+	GreenNeedle._erraticEstColour = GreenNeedle._erraticEstColour or {1, 1, 1, 1}
+	local e_text, e_colour = format_estimate(erratic_est)
+	GreenNeedle._erraticEstText.value = e_text
+	GreenNeedle._erraticEstColour[1] = e_colour[1]
+	GreenNeedle._erraticEstColour[2] = e_colour[2]
+	GreenNeedle._erraticEstColour[3] = e_colour[3]
+	GreenNeedle._erraticEstColour[4] = e_colour[4]
+	col2_nodes[#col2_nodes + 1] = {n=G.UIT.R, config={align = "cm", minh = 0.5, colour = G.C.CLEAR}, nodes={}}
+	col2_nodes[#col2_nodes + 1] = {n=G.UIT.R, config={align="cm"}, nodes={
+		{n=G.UIT.T, config={text = "Erratic only", scale = 0.25, colour = G.C.WHITE}},
+	}}
+	col2_nodes[#col2_nodes + 1] = {n=G.UIT.R, config={align="cm"}, nodes={
+		{n=G.UIT.T, config={
+			ref_table = GreenNeedle._erraticEstText,
+			ref_value = "value",
+			scale = 0.3,
+			colour = GreenNeedle._erraticEstColour,
+		}},
+	}}
+
+	-- Column 3: Rank 2 + spacer + Rank 4 + combined estimate
+	local col3_nodes = {}
+	local r2 = erratic_rank_block(s, 2)
+	for _, n in ipairs(r2) do col3_nodes[#col3_nodes + 1] = n end
+	col3_nodes[#col3_nodes + 1] = {n=G.UIT.R, config={align = "cm", minh = 1.0, colour = G.C.CLEAR}, nodes={}}
+	local r4 = erratic_rank_block(s, 4)
+	for _, n in ipairs(r4) do col3_nodes[#col3_nodes + 1] = n end
+
+	-- Combined estimate at bottom of col 3 (always includes erratic)
+	local combined_est = GreenNeedle.estimate_combined_seeds()
+	GreenNeedle._combinedEstText = GreenNeedle._combinedEstText or {}
+	GreenNeedle._combinedEstColour = GreenNeedle._combinedEstColour or {1, 1, 1, 1}
+	local c_text, c_colour = format_estimate(combined_est)
+	GreenNeedle._combinedEstText.value = c_text
+	GreenNeedle._combinedEstColour[1] = c_colour[1]
+	GreenNeedle._combinedEstColour[2] = c_colour[2]
+	GreenNeedle._combinedEstColour[3] = c_colour[3]
+	GreenNeedle._combinedEstColour[4] = c_colour[4]
+	col3_nodes[#col3_nodes + 1] = {n=G.UIT.R, config={align = "cm", minh = 0.5, colour = G.C.CLEAR}, nodes={}}
+	col3_nodes[#col3_nodes + 1] = {n=G.UIT.R, config={align="cm"}, nodes={
+		{n=G.UIT.T, config={text = "Combined", scale = 0.25, colour = G.C.WHITE}},
+	}}
+	col3_nodes[#col3_nodes + 1] = {n=G.UIT.R, config={align="cm"}, nodes={
+		{n=G.UIT.T, config={
+			ref_table = GreenNeedle._combinedEstText,
+			ref_value = "value",
+			scale = 0.3,
+			colour = GreenNeedle._combinedEstColour,
+		}},
+	}}
 
 	return {n=G.UIT.ROOT, config={align = "cm", padding = 0.05, colour = G.C.CLEAR}, nodes={
 		{n=G.UIT.R, config={align = "tm", padding = 0.08}, nodes={
@@ -866,27 +972,17 @@ function GreenNeedle.erratic_panel()
 	}}
 end
 
--- Update the estimate text in-place without rebuilding the UI
+-- Update all estimate texts in-place without rebuilding the UI
 function GreenNeedle.update_estimate_text()
-	if GreenNeedle._estimateDisplayText then
-		local est = GreenNeedle.estimate_search_seeds()
-		local max_seeds = 2251875390625 -- 35^8
-		if est > max_seeds then
-			GreenNeedle._estimateDisplayText.value = "Est. ~" .. GreenNeedle.format_seed_count(est) .. " seeds (unlikely)"
-		elseif est > 0 then
-			GreenNeedle._estimateDisplayText.value = "Est. ~" .. GreenNeedle.format_seed_count(est) .. " seeds"
-		else
-			GreenNeedle._estimateDisplayText.value = ""
-		end
-		-- Update colour in place (same table reference used by the live DynaText)
-		if GreenNeedle._estimateColour then
-			local new_colour = estimate_colour(est)
-			GreenNeedle._estimateColour[1] = new_colour[1]
-			GreenNeedle._estimateColour[2] = new_colour[2]
-			GreenNeedle._estimateColour[3] = new_colour[3]
-			GreenNeedle._estimateColour[4] = new_colour[4]
-		end
-	end
+	-- Tag & Shop panel estimate
+	update_estimate_ref(GreenNeedle._estimateDisplayText, GreenNeedle._estimateColour,
+		GreenNeedle.estimate_search_seeds())
+	-- Erratic panel: erratic-only estimate
+	update_estimate_ref(GreenNeedle._erraticEstText, GreenNeedle._erraticEstColour,
+		GreenNeedle.estimate_erratic_seeds())
+	-- Erratic panel: combined estimate (always includes erratic)
+	update_estimate_ref(GreenNeedle._combinedEstText, GreenNeedle._combinedEstColour,
+		GreenNeedle.estimate_combined_seeds())
 end
 
 -- Main menu button callback: open Green Needle settings as an overlay
