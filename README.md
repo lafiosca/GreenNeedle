@@ -72,7 +72,7 @@ Requires the [Lovely](https://github.com/ethangreen-dev/lovely-injector) mod loa
    - **Windows:** `%AppData%/Balatro/Mods/`
 3. Launch Balatro — a **Green Needle** button will appear in the main menu
 
-The mod works on all platforms via the pure-Lua search fallback. The pre-built native library (`greenneedle.dylib`) is macOS-only for now — see the Building section below if you'd like to compile for your platform.
+The mod works on all platforms via the pure-Lua search fallback. Pre-built native libraries are included for macOS (`greenneedle.dylib`) and Windows (`greenneedle.dll`) — see the Building section below if you'd like to recompile.
 
 ## Usage
 
@@ -84,9 +84,7 @@ The mod works on all platforms via the pure-Lua search fallback. The pre-built n
 
 ## Building the Native Library
 
-The native search library provides dramatically faster searching. Pre-built for macOS (universal binary: Apple Silicon arm64 + Intel x86_64).
-
-The C source (`native/greenneedle.c`) is portable C11 with no platform-specific dependencies — it should compile on Windows and Linux as well.
+The native search library provides dramatically faster searching. Pre-built for macOS (universal binary: Apple Silicon arm64 + Intel x86_64) and Windows (x86_64).
 
 To rebuild on macOS:
 
@@ -96,6 +94,16 @@ cd native
 ```
 
 Requires Xcode Command Line Tools (`xcode-select --install`).
+
+To cross-compile the Windows DLL from macOS:
+
+```bash
+brew install mingw-w64
+cd native
+./build_windows.sh
+```
+
+The C source (`native/greenneedle.c`) is portable C11 — it can also be compiled natively on Windows or Linux with any C11 compiler.
 
 ## Settings
 

@@ -13,9 +13,15 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#define _USE_MATH_DEFINES
 #include <math.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <pthread.h>
 #include <unistd.h>
+#endif
 
 /* --------------------------------------------------------------------------
  * Lua 5.4 PRNG (4-state xor-shift, matches math.randomseed / math.random)
@@ -1189,14 +1195,22 @@ typedef struct {
     atomic_int    *found;
 } SearchWorker;
 
+#ifdef _WIN32
+static DWORD WINAPI search_worker(LPVOID arg) {
+#else
 static void *search_worker(void *arg) {
+#endif
     SearchWorker *w = (SearchWorker *)arg;
     char seed[SEED_LEN + 1];
     seed[SEED_LEN] = '\0';
 
     for (int n = 0; n < w->count; n++) {
         /* Check if another thread already found a result (every 32 seeds) */
+#ifdef _WIN32
+        if ((n & 31) == 0 && atomic_load(w->found)) return 0;
+#else
         if ((n & 31) == 0 && atomic_load(w->found)) return NULL;
+#endif
 
         uint64_t tmp = w->start_offset + n;
         for (int i = SEED_LEN - 1; i >= 0; i--) {
@@ -1301,12 +1315,23 @@ static void *search_worker(void *arg) {
             memcpy(w->result, seed, SEED_LEN);
             w->result[SEED_LEN] = '\0';
             atomic_store(w->found, 1);
+#ifdef _WIN32
+            return 0;
+#else
             return NULL;
+#endif
         }
     }
+#ifdef _WIN32
+    return 0;
+#else
     return NULL;
+#endif
 }
 
+#ifdef _WIN32
+__declspec(dllexport)
+#endif
 const char *greenneedle_search(
     const char *start_seed,
     int         max_seeds,
@@ -1425,14 +1450,24 @@ const char *greenneedle_search(
     }
 
     /* Determine thread count */
+#ifdef _WIN32
+    SYSTEM_INFO sysinfo;
+    GetSystemInfo(&sysinfo);
+    int num_threads = (int)sysinfo.dwNumberOfProcessors;
+#else
     int num_threads = (int)sysconf(_SC_NPROCESSORS_ONLN);
+#endif
     if (num_threads <= 0) num_threads = 4;
     if (num_threads > MAX_THREADS) num_threads = MAX_THREADS;
     if (num_threads > max_seeds) num_threads = max_seeds;
 
     atomic_int found_flag = 0;
     SearchWorker workers[MAX_THREADS];
+#ifdef _WIN32
+    HANDLE threads[MAX_THREADS];
+#else
     pthread_t threads[MAX_THREADS];
+#endif
 
     int seeds_per_thread = max_seeds / num_threads;
     int remainder = max_seeds % num_threads;
@@ -1498,13 +1533,24 @@ const char *greenneedle_search(
 
     /* Launch all threads */
     for (int t = 0; t < num_threads; t++) {
+#ifdef _WIN32
+        threads[t] = CreateThread(NULL, 0, search_worker, &workers[t], 0, NULL);
+#else
         pthread_create(&threads[t], NULL, search_worker, &workers[t]);
+#endif
     }
 
     /* Wait for all threads to finish */
+#ifdef _WIN32
+    WaitForMultipleObjects(num_threads, threads, TRUE, INFINITE);
+    for (int t = 0; t < num_threads; t++) {
+        CloseHandle(threads[t]);
+    }
+#else
     for (int t = 0; t < num_threads; t++) {
         pthread_join(threads[t], NULL);
     }
+#endif
 
     /* Collect first result found (lowest offset wins for determinism) */
     for (int t = 0; t < num_threads; t++) {

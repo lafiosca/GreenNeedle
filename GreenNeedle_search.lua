@@ -54,9 +54,10 @@ do
                 const char *erratic_filter
             );
         ]]
-        local dylib_path = lovely.mod_dir .. "/GreenNeedle/greenneedle.dylib"
-        if nativefs.getInfo(dylib_path) then
-            local lib_ok, lib = pcall(ffi.load, dylib_path)
+        local mod_dir = lovely.mod_dir .. "/GreenNeedle/"
+        local lib_path = mod_dir .. (ffi.os == "Windows" and "greenneedle.dll" or "greenneedle.dylib")
+        if nativefs.getInfo(lib_path) then
+            local lib_ok, lib = pcall(ffi.load, lib_path)
             if lib_ok and lib then
                 GreenNeedle.native = lib
                 GreenNeedle.ffi = ffi
