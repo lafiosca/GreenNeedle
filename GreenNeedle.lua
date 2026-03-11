@@ -53,6 +53,16 @@ GreenNeedle.SETTINGS = {
 		seedsPerFrame = 100000,
 		seedsPerFrameID = 3,
 	},
+	erratic = {
+		rank1 = "Any", rank1ID = 1, rank1Min = 0, rank1Max = 52,
+		rank2 = "Any", rank2ID = 1, rank2Min = 0, rank2Max = 52,
+		rank3 = "Any", rank3ID = 1, rank3Min = 0, rank3Max = 52,
+		rank4 = "Any", rank4ID = 1, rank4Min = 0, rank4Max = 52,
+		clubsMin = 0, clubsMax = 52,
+		diamondsMin = 0, diamondsMax = 52,
+		heartsMin = 0, heartsMax = 52,
+		spadesMin = 0, spadesMax = 52,
+	},
 }
 
 function initGreenNeedle()

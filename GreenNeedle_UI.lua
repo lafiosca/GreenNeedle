@@ -411,14 +411,15 @@ end
 
 function GreenNeedle.refresh_settings_tab()
 	if G.OVERLAY_MENU then
-		local container = G.OVERLAY_MENU:get_UIE_by_ID('gn_content')
+		local container = G.OVERLAY_MENU:get_UIE_by_ID('tab_contents')
 		if container then
 			GreenNeedle._suppress_pop_in = true
 			container.config.object:remove()
 			container.config.object = UIBox{
-				definition = GreenNeedle.settings_panel(),
-				config = {offset = {x = 0, y = 0}, parent = container},
+				definition = GreenNeedle.tag_shop_panel(),
+				config = {offset = {x = 0, y = 0}, parent = container, type = 'cm'},
 			}
+			container.UIBox:recalculate()
 			GreenNeedle._suppress_pop_in = false
 		end
 	end
@@ -439,8 +440,8 @@ local function estimate_colour(est)
 	end
 end
 
--- Green Needle settings panel definition (shared by settings tab and main menu button)
-function GreenNeedle.settings_panel()
+-- Green Needle "Tag & Shop" tab definition
+function GreenNeedle.tag_shop_panel()
 				local s = GreenNeedle.SETTINGS.autoreroll
 
 				-- Dynamic card selectors for tag
@@ -714,6 +715,157 @@ function GreenNeedle.settings_panel()
 end
 
 
+-- Erratic deck search selectors
+local erraticRankKeys = {"Any", "2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King", "Ace"}
+
+-- Helper: build a slider pair (min + max) for an erratic count filter
+local function erratic_slider_pair(label, ref_table, min_key, max_key, callback)
+	return {
+		create_slider({
+			label = "Min " .. label,
+			label_scale = 0.35,
+			w = 3,
+			h = 0.3,
+			ref_table = ref_table,
+			ref_value = min_key,
+			min = 0,
+			max = 52,
+			callback = callback,
+		}),
+		create_slider({
+			label = "Max " .. label,
+			label_scale = 0.35,
+			w = 3,
+			h = 0.3,
+			ref_table = ref_table,
+			ref_value = max_key,
+			min = 0,
+			max = 52,
+			callback = callback,
+		}),
+	}
+end
+
+-- Build rank option keys excluding ranks already selected by other rank slots
+local function erratic_rank_options(s, slot_index)
+	local used = {}
+	for i = 1, 4 do
+		if i ~= slot_index and (s["rank" .. i .. "ID"] or 1) > 1 then
+			used[s["rank" .. i]] = true
+		end
+	end
+	local opts = {}
+	for _, r in ipairs(erraticRankKeys) do
+		if r == "Any" or not used[r] then
+			opts[#opts + 1] = r
+		end
+	end
+	return opts
+end
+
+-- Find the current_option index in a filtered options list
+local function erratic_rank_current(opts, rank_val)
+	if not rank_val or rank_val == "Any" then return 1 end
+	for i, v in ipairs(opts) do
+		if v == rank_val then return i end
+	end
+	return 1 -- fell out (rank was removed), reset to Any
+end
+
+-- Spacer matching the height of two sliders (min + max)
+local function erratic_slider_spacer()
+	return {n=G.UIT.R, config={align = "cm", minh = 2.06, colour = G.C.CLEAR}, nodes={}}
+end
+
+-- Build a rank selector block: cycle + sliders or spacer
+local function erratic_rank_block(s, i)
+	local nodes = {}
+	local opts = erratic_rank_options(s, i)
+	local cur = erratic_rank_current(opts, s["rank" .. i])
+	nodes[#nodes + 1] = create_option_cycle({
+		label = "Rank " .. i,
+		scale = 0.8,
+		w = 4,
+		options = opts,
+		opt_callback = "gn_erratic_rank" .. i,
+		current_option = cur,
+	})
+	if (s["rank" .. i] or "Any") ~= "Any" then
+		local rank_name = s["rank" .. i]
+		local plural = rank_name .. "s"
+		local sliders = erratic_slider_pair(
+			plural, s,
+			"rank" .. i .. "Min", "rank" .. i .. "Max",
+			"gn_erratic_save"
+		)
+		for _, sl in ipairs(sliders) do
+			nodes[#nodes + 1] = sl
+		end
+	else
+		nodes[#nodes + 1] = erratic_slider_spacer()
+	end
+	return nodes
+end
+
+-- Green Needle "Erratic" tab definition
+function GreenNeedle.erratic_panel()
+	local s = GreenNeedle.SETTINGS.erratic
+	if not s then
+		GreenNeedle.SETTINGS.erratic = {}
+		s = GreenNeedle.SETTINGS.erratic
+	end
+
+	-- Ensure defaults
+	for i = 1, 4 do
+		if not s["rank" .. i] then s["rank" .. i] = "Any" end
+		if not s["rank" .. i .. "ID"] then s["rank" .. i .. "ID"] = 1 end
+		if not s["rank" .. i .. "Min"] then s["rank" .. i .. "Min"] = 0 end
+		if not s["rank" .. i .. "Max"] then s["rank" .. i .. "Max"] = 52 end
+	end
+	for _, suit in ipairs({"clubs", "diamonds", "hearts", "spades"}) do
+		if not s[suit .. "Min"] then s[suit .. "Min"] = 0 end
+		if not s[suit .. "Max"] then s[suit .. "Max"] = 52 end
+	end
+
+	-- Column 1: Rank 1 + spacer + Rank 3
+	local col1_nodes = {}
+	local r1 = erratic_rank_block(s, 1)
+	for _, n in ipairs(r1) do col1_nodes[#col1_nodes + 1] = n end
+	col1_nodes[#col1_nodes + 1] = {n=G.UIT.R, config={align = "cm", minh = 1.0, colour = G.C.CLEAR}, nodes={}}
+	local r3 = erratic_rank_block(s, 3)
+	for _, n in ipairs(r3) do col1_nodes[#col1_nodes + 1] = n end
+
+	-- Column 2: Rank 2 + spacer + Rank 4
+	local col2_nodes = {}
+	local r2 = erratic_rank_block(s, 2)
+	for _, n in ipairs(r2) do col2_nodes[#col2_nodes + 1] = n end
+	col2_nodes[#col2_nodes + 1] = {n=G.UIT.R, config={align = "cm", minh = 1.0, colour = G.C.CLEAR}, nodes={}}
+	local r4 = erratic_rank_block(s, 4)
+	for _, n in ipairs(r4) do col2_nodes[#col2_nodes + 1] = n end
+
+	-- Column 3: All four suits
+	local col3_nodes = {}
+	local suits = {"clubs", "diamonds", "hearts", "spades"}
+	for si, suit in ipairs(suits) do
+		local label = suit:sub(1,1):upper() .. suit:sub(2)
+		local sliders = erratic_slider_pair(label, s, suit .. "Min", suit .. "Max", "gn_erratic_save")
+		for _, sl in ipairs(sliders) do
+			col3_nodes[#col3_nodes + 1] = sl
+		end
+		if si < #suits then
+			col3_nodes[#col3_nodes + 1] = {n=G.UIT.R, config={align = "cm", minh = 0.25, colour = G.C.CLEAR}, nodes={}}
+		end
+	end
+
+	return {n=G.UIT.ROOT, config={align = "cm", padding = 0.05, colour = G.C.CLEAR}, nodes={
+		{n=G.UIT.R, config={align = "tm", padding = 0.08}, nodes={
+			{n=G.UIT.C, config={align = "tm", padding = 0.05, minw = 4.5}, nodes=col1_nodes},
+			{n=G.UIT.C, config={align = "tm", padding = 0.05, minw = 4.5}, nodes=col2_nodes},
+			{n=G.UIT.C, config={align = "tm", padding = 0.05, minw = 4.5}, nodes=col3_nodes},
+		}},
+	}}
+end
+
 -- Update the estimate text in-place without rebuilding the UI
 function GreenNeedle.update_estimate_text()
 	if GreenNeedle._estimateDisplayText then
@@ -741,14 +893,26 @@ end
 G.FUNCS.greenneedle_config = function(e)
 	G.SETTINGS.paused = true
 	GreenNeedle._suppress_pop_in = true
-	local content_box = UIBox{
-		definition = GreenNeedle.settings_panel(),
-		config = {offset = {x = 0, y = 0}},
-	}
 	G.FUNCS.overlay_menu({
 		definition = create_UIBox_generic_options({
 			back_func = "options",
-			contents = {{n=G.UIT.O, config={id = 'gn_content', object = content_box}}},
+			contents = {create_tabs({
+				tabs = {
+					{
+						label = "Tag & Shop",
+						chosen = true,
+						tab_definition_function = GreenNeedle.tag_shop_panel,
+					},
+					{
+						label = "Erratic",
+						tab_definition_function = GreenNeedle.erratic_panel,
+					},
+				},
+				scale = 1.3,
+				tab_h = 7.05,
+				tab_alignment = "tm",
+				snap_to_nav = true,
+			})},
 		}),
 		config = {offset = {x = 0, y = 0}},
 	})

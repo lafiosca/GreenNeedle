@@ -50,7 +50,8 @@ do
                 const char *joker_key_append,
                 int         joker_pack_size,
                 const char *joker_edition,
-                const char *tag_joker
+                const char *tag_joker,
+                const char *erratic_filter
             );
         ]]
         local dylib_path = lovely.mod_dir .. "/GreenNeedle/greenneedle.dylib"
@@ -1709,6 +1710,30 @@ function GreenNeedle.auto_reroll()
 			print("[GN]   tag_mask=" .. tag_mask .. " rare_joker_mask=" .. rare_joker_mask)
 		end
 
+		-- Build erratic filter string for native
+		local erratic_filter_arg = ""
+		if G.GAME.starting_params.erratic_suits_and_ranks and GreenNeedle.has_erratic_filters() then
+			local es = GreenNeedle.SETTINGS.erratic
+			local parts = {}
+			for i = 1, 4 do
+				local rank = es["rank" .. i]
+				local ridx = -1
+				if rank and rank ~= "Any" then
+					ridx = GreenNeedle.ERRATIC_RANK_TO_IDX[rank] or -1
+				end
+				parts[#parts+1] = ridx
+				parts[#parts+1] = math.floor((es["rank" .. i .. "Min"] or 0) + 0.5)
+				parts[#parts+1] = math.floor((es["rank" .. i .. "Max"] or 52) + 0.5)
+			end
+			for _, suit in ipairs({"clubs", "diamonds", "hearts", "spades"}) do
+				parts[#parts+1] = math.floor((es[suit .. "Min"] or 0) + 0.5)
+				parts[#parts+1] = math.floor((es[suit .. "Max"] or 52) + 0.5)
+			end
+			local strs = {}
+			for _, v in ipairs(parts) do strs[#strs+1] = tostring(v) end
+			erratic_filter_arg = table.concat(strs, ",")
+		end
+
 		local result = GreenNeedle.native.greenneedle_search(
 			start_seed,
 			s.seedsPerFrame or 100000,
@@ -1739,7 +1764,8 @@ function GreenNeedle.auto_reroll()
 			joker_key_append,
 			joker_pack_size,
 			joker_edition_arg,
-			tag_joker_arg
+			tag_joker_arg,
+			erratic_filter_arg
 		)
 		result = result ~= nil and GreenNeedle.ffi.string(result) or ""
 		if result ~= "" then
@@ -1914,6 +1940,12 @@ function GreenNeedle.auto_reroll()
 					end
 				end
 			end
+			-- Erratic deck filter (only when Erratic deck is selected)
+			if seed_found and G.GAME.starting_params.erratic_suits_and_ranks and GreenNeedle.has_erratic_filters() then
+				if not GreenNeedle.check_erratic_deck(seed_found) then
+					seed_found = nil
+				end
+			end
 		end
 	end
 
@@ -2047,4 +2079,150 @@ function GreenNeedle.remove_attention_text(args)
           end
         end
       }))
+end
+
+-- ---------------------------------------------------------------------------
+-- Erratic deck callbacks
+-- ---------------------------------------------------------------------------
+
+-- Save callback for sliders (sliders write directly to ref_table, just need to persist)
+G.FUNCS.gn_erratic_save = function(rt)
+	nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
+end
+
+-- Refresh the erratic tab content
+function GreenNeedle.refresh_erratic_tab()
+	if G.OVERLAY_MENU then
+		local container = G.OVERLAY_MENU:get_UIE_by_ID('tab_contents')
+		if container then
+			GreenNeedle._suppress_pop_in = true
+			container.config.object:remove()
+			container.config.object = UIBox{
+				definition = GreenNeedle.erratic_panel(),
+				config = {offset = {x = 0, y = 0}, parent = container, type = 'cm'},
+			}
+			container.UIBox:recalculate()
+			GreenNeedle._suppress_pop_in = false
+		end
+	end
+end
+
+-- ---------------------------------------------------------------------------
+-- Erratic deck prediction
+-- ---------------------------------------------------------------------------
+
+-- Map display rank names to C pool rank index (alphabetical: 2,3,4,5,6,7,8,9,A,J,K,Q,T = 0-12)
+GreenNeedle.ERRATIC_RANK_TO_IDX = {
+	["2"]=0, ["3"]=1, ["4"]=2, ["5"]=3, ["6"]=4, ["7"]=5, ["8"]=6, ["9"]=7,
+	["Ace"]=8, ["Jack"]=9, ["King"]=10, ["Queen"]=11, ["10"]=12,
+}
+
+-- The 52 P_CARDS keys sorted alphabetically (same order as pseudorandom_element)
+GreenNeedle.ERRATIC_POOL = {
+	"C_2","C_3","C_4","C_5","C_6","C_7","C_8","C_9","C_A","C_J","C_K","C_Q","C_T",
+	"D_2","D_3","D_4","D_5","D_6","D_7","D_8","D_9","D_A","D_J","D_K","D_Q","D_T",
+	"H_2","H_3","H_4","H_5","H_6","H_7","H_8","H_9","H_A","H_J","H_K","H_Q","H_T",
+	"S_2","S_3","S_4","S_5","S_6","S_7","S_8","S_9","S_A","S_J","S_K","S_Q","S_T",
+}
+
+-- Map rank character from P_CARDS key to display name
+GreenNeedle.ERRATIC_RANK_MAP = {
+	["2"]="2",["3"]="3",["4"]="4",["5"]="5",["6"]="6",["7"]="7",["8"]="8",["9"]="9",
+	["T"]="10",["J"]="Jack",["Q"]="Queen",["K"]="King",["A"]="Ace",
+}
+
+-- Map suit character from P_CARDS key to display name
+GreenNeedle.ERRATIC_SUIT_MAP = {
+	["C"]="clubs",["D"]="diamonds",["H"]="hearts",["S"]="spades",
+}
+
+-- Predict the erratic deck composition for a seed.
+-- Returns rank_counts (display_name -> count) and suit_counts (lowercase -> count)
+function GreenNeedle.predict_erratic_deck(seed)
+	local rank_counts = {}
+	local suit_counts = {clubs=0, diamonds=0, hearts=0, spades=0}
+	for _, name in pairs(GreenNeedle.ERRATIC_RANK_MAP) do rank_counts[name] = 0 end
+
+	-- Replicate the stateful pseudoseed('erratic') path for 52 calls
+	local state = pseudohash("erratic" .. seed)
+	local hashed_seed = pseudohash(seed)
+
+	for i = 1, 52 do
+		-- Advance state (same as pseudoseed stateful path)
+		state = math.abs(tonumber(string.format("%.13f", (2.134453429141 + state * 1.72431234) % 1)))
+		local pseed = (state + hashed_seed) / 2
+
+		-- pseudorandom_element: seed RNG then pick from pool
+		math.randomseed(pseed)
+		local idx = math.random(52)
+		local key = GreenNeedle.ERRATIC_POOL[idx]
+
+		local suit_char = key:sub(1,1)
+		local rank_char = key:sub(3,3)
+		local rank_name = GreenNeedle.ERRATIC_RANK_MAP[rank_char]
+		local suit_name = GreenNeedle.ERRATIC_SUIT_MAP[suit_char]
+		rank_counts[rank_name] = rank_counts[rank_name] + 1
+		suit_counts[suit_name] = suit_counts[suit_name] + 1
+	end
+
+	return rank_counts, suit_counts
+end
+
+-- Check if any erratic filters are active
+function GreenNeedle.has_erratic_filters()
+	local s = GreenNeedle.SETTINGS.erratic
+	if not s then return false end
+	for i = 1, 4 do
+		if (s["rank" .. i] or "Any") ~= "Any" then return true end
+	end
+	for _, suit in ipairs({"clubs", "diamonds", "hearts", "spades"}) do
+		if math.floor((s[suit .. "Min"] or 0) + 0.5) > 0 then return true end
+		if math.floor((s[suit .. "Max"] or 52) + 0.5) < 52 then return true end
+	end
+	return false
+end
+
+-- Check if an erratic deck matches the current filter settings
+function GreenNeedle.check_erratic_deck(seed)
+	local s = GreenNeedle.SETTINGS.erratic
+	if not s then return true end
+
+	local rank_counts, suit_counts = GreenNeedle.predict_erratic_deck(seed)
+
+	-- Check rank filters
+	for i = 1, 4 do
+		local rank = s["rank" .. i]
+		if rank and rank ~= "Any" then
+			local count = rank_counts[rank] or 0
+			local min_val = math.floor((s["rank" .. i .. "Min"] or 0) + 0.5)
+			local max_val = math.floor((s["rank" .. i .. "Max"] or 52) + 0.5)
+			if count < min_val or count > max_val then return false end
+		end
+	end
+
+	-- Check suit filters
+	for _, suit in ipairs({"clubs", "diamonds", "hearts", "spades"}) do
+		local count = suit_counts[suit] or 0
+		local min_val = math.floor((s[suit .. "Min"] or 0) + 0.5)
+		local max_val = math.floor((s[suit .. "Max"] or 52) + 0.5)
+		if count < min_val or count > max_val then return false end
+	end
+
+	return true
+end
+
+-- Rank cycle callbacks (selecting a rank shows/hides sliders)
+for i = 1, 4 do
+	G.FUNCS["gn_erratic_rank" .. i] = function(x)
+		local s = GreenNeedle.SETTINGS.erratic
+		-- Store the display label as the rank value (not the filtered index)
+		s["rank" .. i] = x.to_val == "Any" and "Any" or x.to_val
+		if x.to_val == "Any" then
+			-- Reset min/max when set to "Any"
+			s["rank" .. i .. "Min"] = 0
+			s["rank" .. i .. "Max"] = 52
+		end
+		nativefs.write(lovely.mod_dir .. "/GreenNeedle/settings.lua", STR_PACK(GreenNeedle.SETTINGS))
+		GreenNeedle.refresh_erratic_tab()
+	end
 end

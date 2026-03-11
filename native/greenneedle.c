@@ -1074,6 +1074,71 @@ static const char ALPHA[] = "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 #define SEED_LEN  8
 #define MAX_THREADS 16
 
+/* --------------------------------------------------------------------------
+ * Erratic deck prediction
+ * -------------------------------------------------------------------------- */
+
+/* Rank indices in the alphabetically-sorted P_CARDS pool: 2,3,4,5,6,7,8,9,A,J,K,Q,T = 0-12. */
+#define ERRATIC_NUM_RANKS 13
+
+/* Pool of 52 cards: suits C,D,H,S each with 13 ranks in ERRATIC_RANK_CHARS order.
+ * Card at index i: suit = i/13 (0=C,1=D,2=H,3=S), rank = i%13. */
+
+typedef struct {
+    int  rank_idx[4];  /* rank char index (0-12), or -1 for "Any" */
+    int  rank_min[4];
+    int  rank_max[4];
+    int  suit_min[4];  /* 0=clubs, 1=diamonds, 2=hearts, 3=spades */
+    int  suit_max[4];
+    bool active;       /* true if any filter is non-default */
+} ErraticFilter;
+
+/* Check if a seed's erratic deck composition matches the filter.
+ * The erratic deck is 52 cards, each chosen by pseudoseed('erratic') called 52 times. */
+static bool check_erratic_deck_h(const char *seed, int slen, const ErraticFilter *ef) {
+    if (!ef->active) return true;
+
+    /* Compute pseudohash("erratic" .. seed) as initial state */
+    char buf[64];
+    memcpy(buf, "erratic", 7);
+    memcpy(buf + 7, seed, slen);
+    double state = pseudohash(buf, 7 + slen);
+    double hashed_seed = pseudohash(seed, slen);
+
+    int rank_counts[ERRATIC_NUM_RANKS] = {0};
+    int suit_counts[4] = {0};
+
+    for (int i = 0; i < 52; i++) {
+        /* Advance state (same as Lua pseudoseed stateful path) */
+        double raw = fmod(2.134453429141 + state * 1.72431234, 1.0);
+        state = fabs(round(raw * 1e13) / 1e13);
+        double pseed = (state + hashed_seed) / 2.0;
+
+        /* pseudorandom_element: seed Lua RNG, pick random(52) */
+        LRandom lr = randomseed(pseed);
+        int idx = (int)l_randint(&lr, 1, 52) - 1; /* 0-based */
+        int suit = idx / 13;
+        int rank = idx % 13;
+        rank_counts[rank]++;
+        suit_counts[suit]++;
+    }
+
+    /* Check rank filters */
+    for (int i = 0; i < 4; i++) {
+        if (ef->rank_idx[i] < 0) continue;
+        int count = rank_counts[ef->rank_idx[i]];
+        if (count < ef->rank_min[i] || count > ef->rank_max[i]) return false;
+    }
+
+    /* Check suit filters */
+    for (int i = 0; i < 4; i++) {
+        int count = suit_counts[i];
+        if (count < ef->suit_min[i] || count > ef->suit_max[i]) return false;
+    }
+
+    return true;
+}
+
 typedef struct {
     /* Input: seed range */
     uint64_t       start_offset;
@@ -1117,6 +1182,7 @@ typedef struct {
     bool           want_planet_card, want_planet_card2;
     bool           want_joker_card, want_joker_card2;
     bool           want_tag_joker;
+    ErraticFilter  erratic;
     /* Output */
     char           result[SEED_LEN + 1];
     /* Shared: early exit flag (set by any thread that finds a match) */
@@ -1226,6 +1292,10 @@ static void *search_worker(void *arg) {
             if (strcmp(predict_voucher_h(seed, slen, 2, used, hs), w->voucher2) != 0)
                 ok = false;
         }
+        if (ok && w->erratic.active) {
+            if (!check_erratic_deck_h(seed, slen, &w->erratic))
+                ok = false;
+        }
 
         if (ok) {
             memcpy(w->result, seed, SEED_LEN);
@@ -1267,7 +1337,8 @@ const char *greenneedle_search(
     const char *joker_key_append,
     int         joker_pack_size,
     const char *joker_edition,
-    const char *tag_joker
+    const char *tag_joker,
+    const char *erratic_filter
 ) {
     static char result[16];
     result[0] = '\0';
@@ -1306,6 +1377,39 @@ const char *greenneedle_search(
     bool want_joker_card = joker_card && joker_card[0];
     bool want_joker_card2 = joker_card2 && joker_card2[0];
     bool want_tag_joker = tag_joker && tag_joker[0];
+
+    /* Parse erratic filter: "r0,min0,max0,r1,min1,max1,r2,min2,max2,r3,min3,max3,smin0,smax0,smin1,smax1,smin2,smax2,smin3,smax3" */
+    ErraticFilter ef = {
+        .rank_idx = {-1, -1, -1, -1},
+        .rank_min = {0, 0, 0, 0}, .rank_max = {52, 52, 52, 52},
+        .suit_min = {0, 0, 0, 0}, .suit_max = {52, 52, 52, 52},
+        .active = false
+    };
+    if (erratic_filter && erratic_filter[0]) {
+        int vals[20];
+        int nread = sscanf(erratic_filter,
+            "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
+            &vals[0],&vals[1],&vals[2],&vals[3],&vals[4],&vals[5],
+            &vals[6],&vals[7],&vals[8],&vals[9],&vals[10],&vals[11],
+            &vals[12],&vals[13],&vals[14],&vals[15],&vals[16],&vals[17],
+            &vals[18],&vals[19]);
+        if (nread == 20) {
+            for (int i = 0; i < 4; i++) {
+                ef.rank_idx[i] = vals[i*3];
+                ef.rank_min[i] = vals[i*3+1];
+                ef.rank_max[i] = vals[i*3+2];
+            }
+            for (int i = 0; i < 4; i++) {
+                ef.suit_min[i] = vals[12 + i*2];
+                ef.suit_max[i] = vals[12 + i*2 + 1];
+            }
+            /* Check if any filter is non-default */
+            for (int i = 0; i < 4; i++) {
+                if (ef.rank_idx[i] >= 0) { ef.active = true; break; }
+                if (ef.suit_min[i] > 0 || ef.suit_max[i] < 52) { ef.active = true; break; }
+            }
+        }
+    }
 
     /* Decode start_seed to a uint64 */
     uint64_t offset = 0;
@@ -1386,6 +1490,7 @@ const char *greenneedle_search(
         w->want_joker_card2 = want_joker_card2;
         w->tag_joker       = tag_joker;
         w->want_tag_joker  = want_tag_joker;
+        w->erratic         = ef;
         w->result[0]       = '\0';
         w->found           = &found_flag;
         cursor += chunk;
