@@ -43,7 +43,11 @@ function GreenNeedle.update(dt)
 		if GreenNeedle.AUTOREROLL.autoRerollFrames == 0 then
 			GreenNeedle.AUTOREROLL.seedsSearched = 0
 			GreenNeedle.AUTOREROLL.searchStartTime = os.time()
-			GreenNeedle.AUTOREROLL.searchEstimate = GreenNeedle.estimate_combined_seeds()
+			if G.GAME.starting_params.erratic_suits_and_ranks then
+				GreenNeedle.AUTOREROLL.searchEstimate = GreenNeedle.estimate_combined_seeds()
+			else
+				GreenNeedle.AUTOREROLL.searchEstimate = GreenNeedle.estimate_search_seeds()
+			end
 			GreenNeedle.AUTOREROLL.displayText = GreenNeedle.AUTOREROLL.displayText or {}
 			GreenNeedle.AUTOREROLL.timerDisplayText = GreenNeedle.AUTOREROLL.timerDisplayText or {}
 			local est = GreenNeedle.AUTOREROLL.searchEstimate
