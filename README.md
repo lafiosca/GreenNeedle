@@ -72,7 +72,29 @@ Requires the [Lovely](https://github.com/ethangreen-dev/lovely-injector) mod loa
    - **Windows:** `%AppData%/Balatro/Mods/`
 3. Launch Balatro — a **Green Needle** button will appear in the main menu
 
-The mod works on all platforms via the pure-Lua search fallback. Pre-built native libraries are included for macOS (`greenneedle.dylib`) and Windows (`greenneedle.dll`) — see the Building section below if you'd like to recompile.
+The mod works on all platforms via the pure-Lua search fallback. Pre-built native libraries are included for macOS (`greenneedle.dylib`) and Windows (`greenneedle.dll`).
+
+### macOS: Native Library Setup
+
+macOS may block `greenneedle.dylib` from loading because it was downloaded from the internet. The quickest fix is to remove the quarantine flag:
+
+```bash
+cd ~/Library/Application\ Support/Balatro/Mods/GreenNeedle
+xattr -d com.apple.quarantine greenneedle.dylib
+```
+
+Alternatively, you can compile it yourself from the [source repo](https://github.com/lafiosca/GreenNeedle) (which avoids the quarantine issue entirely):
+
+```bash
+git clone https://github.com/lafiosca/GreenNeedle.git
+cd GreenNeedle/native
+./build_macos.sh
+cp ../greenneedle.dylib ~/Library/Application\ Support/Balatro/Mods/GreenNeedle/
+```
+
+This requires Xcode Command Line Tools (`xcode-select --install`).
+
+If neither option appeals to you, the mod still works without the native library — it just falls back to a slower pure-Lua search.
 
 ## Usage
 

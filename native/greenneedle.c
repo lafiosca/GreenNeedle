@@ -105,39 +105,6 @@ static double pseudohash(const char *s, int len) {
     return num;
 }
 
-/* --------------------------------------------------------------------------
- * pseudoseed -- matches Balatro's pseudoseed(key, predict_seed) predict path
- * -------------------------------------------------------------------------- */
-
-static double gn_pseudoseed(const char *key, int klen, const char *seed, int slen) {
-    /* key .. seed */
-    char buf[512];
-    memcpy(buf, key, klen);
-    memcpy(buf + klen, seed, slen);
-    double _pseed = pseudohash(buf, klen + slen);
-    /* advance */
-    _pseed = fabs(fmod(2.134453429141 + _pseed * 1.72431234, 1.0));
-    /* round to 13 decimal places (matches string.format("%.13f")) */
-    _pseed = round(_pseed * 1e13) / 1e13;
-    double hashed = pseudohash(seed, slen);
-    return (_pseed + hashed) / 2.0;
-}
-
-/* Advance the pseudoseed state N times (for multi-ante voucher prediction).
- * Each call to pseudoseed for the same key in the live game advances the state. */
-static double gn_pseudoseed_advance(const char *key, int klen, const char *seed, int slen, int advances) {
-    char buf[512];
-    memcpy(buf, key, klen);
-    memcpy(buf + klen, seed, slen);
-    double state = pseudohash(buf, klen + slen);
-    for (int i = 0; i < advances; i++) {
-        state = fabs(fmod(2.134453429141 + state * 1.72431234, 1.0));
-        state = round(state * 1e13) / 1e13;
-    }
-    double hashed = pseudohash(seed, slen);
-    return (state + hashed) / 2.0;
-}
-
 /* Cached variants: accept pre-computed pseudohash(seed) to avoid redundant hashing */
 static double gn_pseudoseed_h(const char *key, int klen, const char *seed, int slen, double hashed_seed) {
     char buf[512];
@@ -686,19 +653,6 @@ static const char *predict_pack_h(const char *seed, int slen, int slot, double h
     return PACK_DEFS[PACK_DEFS_SIZE - 1].key;
 }
 
-static bool check_soul_h(const char *seed, int slen, const char *soul_type,
-                          int ante, int pack_size, double hs) {
-    if (hs < 0) hs = pseudohash(seed, slen);
-    char key[64];
-    int klen = snprintf(key, sizeof(key), "soul_%s%d", soul_type, ante);
-    for (int i = 1; i <= pack_size; i++) {
-        double pseed = gn_pseudoseed_advance_h(key, klen, seed, slen, i, hs);
-        LRandom rng = randomseed(pseed);
-        if (l_random(&rng) > 0.997) return true;
-    }
-    return false;
-}
-
 /* Predict the edition of the joker Wraith creates.
  * Uses pseudoseed key "ediwra" + ante. poll_edition base rates (no Hone/Glow Up):
  *   > 0.997  → Negative   (0.3%)
@@ -932,14 +886,6 @@ static bool predict_spectral_inner(const char *seed, int slen, const char *key_a
         unavailable[idx - 1] = true;
     }
     return false;
-}
-
-/* Full prediction (fills out_cards array) */
-static void predict_spectral_cards(const char *seed, int slen, const char *key_append, int ante,
-                                    int pack_size, const char *extra_excluded,
-                                    const char **out_cards) {
-    double hs = pseudohash(seed, slen);
-    predict_spectral_inner(seed, slen, key_append, ante, pack_size, extra_excluded, hs, out_cards, NULL);
 }
 
 /* Search check: returns true if target_card appears in any slot (early exit) */
