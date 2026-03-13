@@ -51,7 +51,13 @@ do
                 int         joker_pack_size,
                 const char *joker_edition,
                 const char *tag_joker,
-                const char *erratic_filter
+                const char *erratic_filter,
+                const char *tag_tarot_card,
+                const char *tag_tarot_card2,
+                int         tag_tarot_pack_size,
+                const char *tag_spectral_card,
+                const char *tag_spectral_card2,
+                int         tag_spectral_pack_size
             );
         ]]
         local mod_dir = lovely.mod_dir .. "/GreenNeedle/"
@@ -126,7 +132,7 @@ local function fix_card2_index(card2_key, lookup_table, base_keys, exclude_label
 	return 1
 end
 
--- Check if The Soul is selected in any card slot; if not, reset Legendary to "Any"
+-- Check if Soul is selected in any card slot; if not, reset Legendary to "Any"
 local function reset_legendary_if_no_soul()
 	local s = GreenNeedle.SETTINGS.autoreroll
 	local has_soul = (s.searchTagCard1 or "") == "c_soul"
@@ -775,9 +781,11 @@ function GreenNeedle.check_soul(seed, soul_type, ante, pack_size)
 end
 
 -- Check if a specific spectral card appears in a spectral pack
-function GreenNeedle.check_spectral_card(seed, key_append, ante, pack_size, extra_excluded, target_card)
+function GreenNeedle.check_spectral_card(seed, key_append, ante, pack_size, extra_excluded, target_card, soul_offset, card_offset)
 	ante = ante or 1
 	pack_size = pack_size or 4
+	soul_offset = soul_offset or 0
+	card_offset = card_offset or 0
 	-- The game uses the same key ('soul_Spectral' .. ante) for both the c_soul
 	-- and c_black_hole checks, advancing state twice per slot.
 	local soul_key = "soul_Spectral" .. ante
@@ -804,8 +812,8 @@ function GreenNeedle.check_spectral_card(seed, key_append, ante, pack_size, extr
 		end
 	end
 
-	local card_advance = 0
-	local soul_advance = 0
+	local card_advance = card_offset
+	local soul_advance = soul_offset
 	for slot = 1, pack_size do
 		-- Both checks always execute, advancing shared state twice per slot.
 		-- If both fire, c_black_hole wins (overwrites c_soul).
@@ -820,9 +828,9 @@ function GreenNeedle.check_spectral_card(seed, key_append, ante, pack_size, extr
 		local is_bh = math.random() > 0.997
 
 		if is_bh then
-			if target_card == "c_black_hole" then return true end
+			if target_card == "c_black_hole" then return true, soul_advance, card_advance end
 		elseif is_soul then
-			if target_card == "c_soul" then return true end
+			if target_card == "c_soul" then return true, soul_advance, card_advance end
 		else
 			card_advance = card_advance + 1
 			local pseed = GreenNeedle.pseudoseed_advance(card_key, seed, card_advance)
@@ -836,16 +844,18 @@ function GreenNeedle.check_spectral_card(seed, key_append, ante, pack_size, extr
 				math.randomseed(rpseed)
 				idx = math.random(#pool)
 			end
-			if pool[idx] == target_card then return true end
+			if pool[idx] == target_card then return true, soul_advance, card_advance end
 		end
 	end
-	return false
+	return false, soul_advance, card_advance
 end
 
 -- Check if a specific tarot card appears in an arcana pack
-function GreenNeedle.check_tarot_card(seed, key_append, ante, pack_size, target_card)
+function GreenNeedle.check_tarot_card(seed, key_append, ante, pack_size, target_card, soul_offset, card_offset)
 	ante = ante or 1
 	pack_size = pack_size or 5
+	soul_offset = soul_offset or 0
+	card_offset = card_offset or 0
 	local soul_key = "soul_Tarot" .. ante
 	local card_key = "Tarot" .. key_append .. ante
 
@@ -854,21 +864,21 @@ function GreenNeedle.check_tarot_card(seed, key_append, ante, pack_size, target_
 		pool[#pool + 1] = v.key
 	end
 
-	local card_advance = 0
+	local card_advance = card_offset
 	for slot = 1, pack_size do
-		local soul_pseed = GreenNeedle.pseudoseed_advance(soul_key, seed, slot)
+		local soul_pseed = GreenNeedle.pseudoseed_advance(soul_key, seed, soul_offset + slot)
 		math.randomseed(soul_pseed)
 		if math.random() > 0.997 then
-			if target_card == "c_soul" then return true end
+			if target_card == "c_soul" then return true, soul_offset + pack_size, card_advance end
 		else
 			card_advance = card_advance + 1
 			local pseed = GreenNeedle.pseudoseed_advance(card_key, seed, card_advance)
 			math.randomseed(pseed)
 			local idx = math.random(#pool)
-			if pool[idx] == target_card then return true end
+			if pool[idx] == target_card then return true, soul_offset + pack_size, card_advance end
 		end
 	end
-	return false
+	return false, soul_offset + pack_size, card_advance
 end
 
 -- Check if a specific planet card appears in a celestial pack
@@ -1632,16 +1642,23 @@ function GreenNeedle.auto_reroll()
 		local spectral_card2_arg = ""
 		local tarot_key_append = "ar1"
 		local pack_slot_count = GreenNeedle.get_pack_slot_count()
-		local tarot_pack_size = 5  -- tag cards always use 5 (Charm Tag = Mega Arcana)
+		local tarot_pack_size = 5
 		local spectral_pack_size = 4
 
-		-- Tag card filters (Charm Tag = tarot cards)
+		-- Tag card filters (separate from shop pack for dual-pack chaining)
+		local tag_tarot_card_arg = ""
+		local tag_tarot_card2_arg = ""
+		local tag_tarot_pack_size = 5
+		local tag_spectral_card_arg = ""
+		local tag_spectral_card2_arg = ""
+		local tag_spectral_pack_size = 4
+
 		if s.searchTag == "tag_charm" then
 			if s.searchTagCard1 and s.searchTagCard1 ~= "" then
-				tarot_card_arg = s.searchTagCard1
+				tag_tarot_card_arg = s.searchTagCard1
 			end
 			if s.searchTagCard2 and s.searchTagCard2 ~= "" then
-				tarot_card2_arg = s.searchTagCard2
+				tag_tarot_card2_arg = s.searchTagCard2
 			end
 		end
 
@@ -1651,18 +1668,10 @@ function GreenNeedle.auto_reroll()
 			if ptype == "tarot" then
 				tarot_pack_size = pack_slot_count
 				if s.searchPackCard1 and s.searchPackCard1 ~= "" then
-					if tarot_card_arg == "" then
-						tarot_card_arg = s.searchPackCard1
-					elseif tarot_card2_arg == "" then
-						tarot_card2_arg = s.searchPackCard1
-					end
+					tarot_card_arg = s.searchPackCard1
 				end
 				if s.searchPackCard2 and s.searchPackCard2 ~= "" then
-					if tarot_card_arg == "" then
-						tarot_card_arg = s.searchPackCard2
-					elseif tarot_card2_arg == "" then
-						tarot_card2_arg = s.searchPackCard2
-					end
+					tarot_card2_arg = s.searchPackCard2
 				end
 			elseif ptype == "spectral" then
 				spectral_pack_size = pack_slot_count
@@ -1773,6 +1782,8 @@ function GreenNeedle.auto_reroll()
 			print("[GN]   planet_card_arg=" .. planet_card_arg .. " planet_card2_arg=" .. planet_card2_arg)
 			print("[GN]   joker_card_arg=" .. joker_card_arg .. " joker_card2_arg=" .. joker_card2_arg .. " joker_edition_arg=" .. joker_edition_arg)
 			print("[GN]   tag_joker_arg=" .. tag_joker_arg)
+			print("[GN]   tag_tarot_card=" .. tag_tarot_card_arg .. " tag_tarot_card2=" .. tag_tarot_card2_arg)
+			print("[GN]   tag_spectral_card=" .. tag_spectral_card_arg .. " tag_spectral_card2=" .. tag_spectral_card2_arg)
 			print("[GN]   tag_mask=" .. tag_mask .. " rare_joker_mask=" .. rare_joker_mask)
 		end
 
@@ -1831,7 +1842,13 @@ function GreenNeedle.auto_reroll()
 			joker_pack_size,
 			joker_edition_arg,
 			tag_joker_arg,
-			erratic_filter_arg
+			erratic_filter_arg,
+			tag_tarot_card_arg,
+			tag_tarot_card2_arg,
+			tag_tarot_pack_size,
+			tag_spectral_card_arg,
+			tag_spectral_card2_arg,
+			tag_spectral_pack_size
 		)
 		result = result ~= nil and GreenNeedle.ffi.string(result) or ""
 		if result ~= "" then
@@ -1878,28 +1895,31 @@ function GreenNeedle.auto_reroll()
 					seed_found = nil
 				end
 			end
-			-- Tag card 1 (Charm Tag Mega Arcana)
-			if seed_found and s.searchTagCard1 and s.searchTagCard1 ~= "" and s.searchTag == "tag_charm" then
-				if not GreenNeedle.check_tarot_card(seed_found, "ar1", 1, 5, s.searchTagCard1) then
-					seed_found = nil
+			-- Tag card checks (Charm Tag Mega Arcana) — track ending state for chaining
+			local tarot_soul_end, tarot_card_end = 0, 0
+			local spec_soul_end, spec_card_end = 0, 0
+			if seed_found and s.searchTag == "tag_charm" then
+				if s.searchTagCard1 and s.searchTagCard1 ~= "" then
+					local ok
+					ok, tarot_soul_end, tarot_card_end = GreenNeedle.check_tarot_card(seed_found, "ar1", 1, 5, s.searchTagCard1)
+					if not ok then seed_found = nil end
+				end
+				if seed_found and s.searchTagCard2 and s.searchTagCard2 ~= "" then
+					local ok, se, ce = GreenNeedle.check_tarot_card(seed_found, "ar1", 1, 5, s.searchTagCard2)
+					if not ok then seed_found = nil end
+					if tarot_soul_end == 0 then tarot_soul_end, tarot_card_end = se, ce end
 				end
 			end
-			-- Tag card 2
-			if seed_found and s.searchTagCard2 and s.searchTagCard2 ~= "" and s.searchTag == "tag_charm" then
-				if not GreenNeedle.check_tarot_card(seed_found, "ar1", 1, 5, s.searchTagCard2) then
-					seed_found = nil
-				end
-			end
-			-- Pack card 1 (only if a pack filter is set)
+			-- Pack card 1 (chaining tarot/spectral offsets from tag pack)
 			if seed_found and s.searchPackCard1 and s.searchPackCard1 ~= "" and s.searchPack and #s.searchPack > 0 then
 				local ptype = GreenNeedle.get_pack_card_type()
 				local pslots = GreenNeedle.get_pack_slot_count()
 				if ptype == "spectral" then
-					if not GreenNeedle.check_spectral_card(seed_found, "spe", 1, pslots, nil, s.searchPackCard1) then
+					if not GreenNeedle.check_spectral_card(seed_found, "spe", 1, pslots, nil, s.searchPackCard1, spec_soul_end, spec_card_end) then
 						seed_found = nil
 					end
 				elseif ptype == "tarot" then
-					if not GreenNeedle.check_tarot_card(seed_found, "ar1", 1, pslots, s.searchPackCard1) then
+					if not GreenNeedle.check_tarot_card(seed_found, "ar1", 1, pslots, s.searchPackCard1, tarot_soul_end, tarot_card_end) then
 						seed_found = nil
 					end
 				elseif ptype == "planet" then
@@ -1913,16 +1933,16 @@ function GreenNeedle.auto_reroll()
 					end
 				end
 			end
-			-- Pack card 2 (only if a pack filter is set)
+			-- Pack card 2 (chaining tarot/spectral offsets from tag pack)
 			if seed_found and s.searchPackCard2 and s.searchPackCard2 ~= "" and s.searchPack and #s.searchPack > 0 then
 				local ptype = GreenNeedle.get_pack_card_type()
 				local pslots = GreenNeedle.get_pack_slot_count()
 				if ptype == "spectral" then
-					if not GreenNeedle.check_spectral_card(seed_found, "spe", 1, pslots, nil, s.searchPackCard2) then
+					if not GreenNeedle.check_spectral_card(seed_found, "spe", 1, pslots, nil, s.searchPackCard2, spec_soul_end, spec_card_end) then
 						seed_found = nil
 					end
 				elseif ptype == "tarot" then
-					if not GreenNeedle.check_tarot_card(seed_found, "ar1", 1, pslots, s.searchPackCard2) then
+					if not GreenNeedle.check_tarot_card(seed_found, "ar1", 1, pslots, s.searchPackCard2, tarot_soul_end, tarot_card_end) then
 						seed_found = nil
 					end
 				elseif ptype == "planet" then

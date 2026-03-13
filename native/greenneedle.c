@@ -784,38 +784,51 @@ static const char *predict_judgement_edition_h(const char *seed, int slen, int a
 
 /* Search check for tarot cards: returns true if target_card appears in any slot (early exit).
  * Same logic as predict_tarot_cards but with hashed_seed cache and early termination. */
+/* Check if target_card appears in a tarot/arcana pack.
+ * soul_offset/card_offset: starting advance counts (for chaining packs that share state).
+ * out_soul_end/out_card_end: if non-NULL, write the final advance counts after this pack. */
 static bool check_tarot_card_h(const char *seed, int slen, const char *key_append, int ante,
-                                int pack_size, double hs, const char *target_card) {
+                                int pack_size, double hs, const char *target_card,
+                                int soul_offset, int card_offset,
+                                int *out_soul_end, int *out_card_end) {
     if (hs < 0) hs = pseudohash(seed, slen);
     char soul_key[64];
     int soul_klen = snprintf(soul_key, sizeof(soul_key), "soul_Tarot%d", ante);
     char card_key[64];
     int card_klen = snprintf(card_key, sizeof(card_key), "Tarot%s%d", key_append, ante);
 
-    int card_advance = 0;
+    bool found = false;
+    int card_advance = card_offset;
     for (int slot = 1; slot <= pack_size; slot++) {
-        double soul_pseed = gn_pseudoseed_advance_h(soul_key, soul_klen, seed, slen, slot, hs);
+        double soul_pseed = gn_pseudoseed_advance_h(soul_key, soul_klen, seed, slen, soul_offset + slot, hs);
         LRandom soul_rng = randomseed(soul_pseed);
         if (l_random(&soul_rng) > 0.997) {
-            if (strcmp("c_soul", target_card) == 0) return true;
+            if (target_card && strcmp("c_soul", target_card) == 0) found = true;
             /* Soul fires: card pool state NOT advanced */
         } else {
             card_advance++;
             double pseed = gn_pseudoseed_advance_h(card_key, card_klen, seed, slen, card_advance, hs);
             LRandom rng = randomseed(pseed);
             uint64_t idx = l_randint(&rng, 1, TAROT_POOL_SIZE);
-            if (strcmp(TAROT_POOL[idx - 1], target_card) == 0) return true;
+            if (target_card && strcmp(TAROT_POOL[idx - 1], target_card) == 0) found = true;
         }
     }
-    return false;
+    if (out_soul_end) *out_soul_end = soul_offset + pack_size;
+    if (out_card_end) *out_card_end = card_advance;
+    return found;
 }
 
 /* Core spectral prediction with cached hashed_seed.
  * out_cards: if non-NULL, fills with predicted card keys for all slots.
  * target_card: if non-NULL, returns true as soon as this card is found (early exit). */
+/* Core spectral prediction with offset support for chaining packs.
+ * soul_offset/card_offset: starting advance counts.
+ * out_soul_end/out_card_end: if non-NULL, write the final advance counts. */
 static bool predict_spectral_inner(const char *seed, int slen, const char *key_append, int ante,
                                     int pack_size, const char *extra_excluded, double hs,
-                                    const char **out_cards, const char *target_card) {
+                                    const char **out_cards, const char *target_card,
+                                    int soul_offset, int card_offset,
+                                    int *out_soul_end, int *out_card_end) {
     /* The game uses pseudorandom('soul_Spectral' .. ante) for BOTH the c_soul
      * and c_black_hole checks (same key, advancing state twice per slot). */
     char soul_key[64];
@@ -837,8 +850,9 @@ static bool predict_spectral_inner(const char *seed, int slen, const char *key_a
         }
     }
 
-    int card_advance = 0;
-    int soul_advance = 0;
+    bool found = false;
+    int card_advance = card_offset;
+    int soul_advance = soul_offset;
     for (int slot = 1; slot <= pack_size; slot++) {
         /* Both checks use the same key ('soul_Spectral' .. ante) and always
          * execute, advancing state twice per slot regardless of outcome.
@@ -854,14 +868,13 @@ static bool predict_spectral_inner(const char *seed, int slen, const char *key_a
         bool is_bh = (l_random(&bh_rng) > 0.997);
 
         if (is_bh) {
-            /* c_black_hole overwrites c_soul if both fire */
             if (out_cards) out_cards[slot - 1] = "c_black_hole";
-            if (target_card && strcmp("c_black_hole", target_card) == 0) return true;
+            if (target_card && strcmp("c_black_hole", target_card) == 0) found = true;
             continue;
         }
         if (is_soul) {
             if (out_cards) out_cards[slot - 1] = "c_soul";
-            if (target_card && strcmp("c_soul", target_card) == 0) return true;
+            if (target_card && strcmp("c_soul", target_card) == 0) found = true;
             continue;
         }
         /* Normal spectral card */
@@ -882,17 +895,12 @@ static bool predict_spectral_inner(const char *seed, int slen, const char *key_a
 
         const char *card = SPECTRAL_POOL[idx - 1];
         if (out_cards) out_cards[slot - 1] = card;
-        if (target_card && card && strcmp(card, target_card) == 0) return true;
+        if (target_card && card && strcmp(card, target_card) == 0) found = true;
         unavailable[idx - 1] = true;
     }
-    return false;
-}
-
-/* Search check: returns true if target_card appears in any slot (early exit) */
-static bool check_spectral_card_h(const char *seed, int slen, const char *key_append, int ante,
-                                   int pack_size, const char *extra_excluded, double hs,
-                                   const char *target_card) {
-    return predict_spectral_inner(seed, slen, key_append, ante, pack_size, extra_excluded, hs, NULL, target_card);
+    if (out_soul_end) *out_soul_end = soul_advance;
+    if (out_card_end) *out_card_end = card_advance;
+    return found;
 }
 
 /* Check if a target planet card appears in a celestial pack.
@@ -1134,6 +1142,15 @@ typedef struct {
     bool           want_planet_card, want_planet_card2;
     bool           want_joker_card, want_joker_card2;
     bool           want_tag_joker;
+    /* Tag card filters (separate from shop pack cards for dual-pack chaining) */
+    const char    *tag_tarot_card;
+    const char    *tag_tarot_card2;
+    int            tag_tarot_pack_size;
+    const char    *tag_spectral_card;
+    const char    *tag_spectral_card2;
+    int            tag_spectral_pack_size;
+    bool           want_tag_tarot_card, want_tag_tarot_card2;
+    bool           want_tag_spectral_card, want_tag_spectral_card2;
     ErraticFilter  erratic;
     /* Output */
     char           result[SEED_LEN + 1];
@@ -1184,22 +1201,70 @@ static void *search_worker(void *arg) {
         if (ok && w->want_legendary) {
             if (strcmp(predict_legendary_h(seed, slen, hs), w->legendary) != 0) ok = false;
         }
-        if (ok && w->want_spectral) {
-            if (!check_spectral_card_h(seed, slen, "spe", 1, w->spectral_pack_size, NULL, hs, w->spectral_card))
+        /* --- Tarot card checks (tag pack then shop pack, chaining state) --- */
+        int tarot_soul_end = 0, tarot_card_end = 0;
+        if (ok && w->want_tag_tarot_card) {
+            if (!check_tarot_card_h(seed, slen, "ar1", 1,
+                                     w->tag_tarot_pack_size, hs, w->tag_tarot_card,
+                                     0, 0, &tarot_soul_end, &tarot_card_end))
                 ok = false;
         }
-        if (ok && w->want_spectral2) {
-            if (!check_spectral_card_h(seed, slen, "spe", 1, w->spectral_pack_size, NULL, hs, w->spectral_card2))
+        if (ok && w->want_tag_tarot_card2) {
+            if (!check_tarot_card_h(seed, slen, "ar1", 1,
+                                     w->tag_tarot_pack_size, hs, w->tag_tarot_card2,
+                                     0, 0,
+                                     w->want_tag_tarot_card ? NULL : &tarot_soul_end,
+                                     w->want_tag_tarot_card ? NULL : &tarot_card_end))
                 ok = false;
         }
+        /* If tag pack was checked, shop tarot pack continues from its ending state;
+         * otherwise shop pack starts from offset 0. */
         if (ok && w->want_tarot_card) {
+            int s_off = (w->want_tag_tarot_card || w->want_tag_tarot_card2) ? tarot_soul_end : 0;
+            int c_off = (w->want_tag_tarot_card || w->want_tag_tarot_card2) ? tarot_card_end : 0;
             if (!check_tarot_card_h(seed, slen, w->tarot_key_append, 1,
-                                     w->tarot_pack_size, hs, w->tarot_card))
+                                     w->tarot_pack_size, hs, w->tarot_card,
+                                     s_off, c_off, NULL, NULL))
                 ok = false;
         }
         if (ok && w->want_tarot_card2) {
+            int s_off = (w->want_tag_tarot_card || w->want_tag_tarot_card2) ? tarot_soul_end : 0;
+            int c_off = (w->want_tag_tarot_card || w->want_tag_tarot_card2) ? tarot_card_end : 0;
             if (!check_tarot_card_h(seed, slen, w->tarot_key_append, 1,
-                                     w->tarot_pack_size, hs, w->tarot_card2))
+                                     w->tarot_pack_size, hs, w->tarot_card2,
+                                     s_off, c_off, NULL, NULL))
+                ok = false;
+        }
+        /* --- Spectral card checks (tag pack then shop pack, chaining state) --- */
+        int spec_soul_end = 0, spec_card_end = 0;
+        if (ok && w->want_tag_spectral_card) {
+            if (!predict_spectral_inner(seed, slen, "spe", 1, w->tag_spectral_pack_size, NULL, hs,
+                                         NULL, w->tag_spectral_card,
+                                         0, 0, &spec_soul_end, &spec_card_end))
+                ok = false;
+        }
+        if (ok && w->want_tag_spectral_card2) {
+            if (!predict_spectral_inner(seed, slen, "spe", 1, w->tag_spectral_pack_size, NULL, hs,
+                                         NULL, w->tag_spectral_card2,
+                                         0, 0,
+                                         w->want_tag_spectral_card ? NULL : &spec_soul_end,
+                                         w->want_tag_spectral_card ? NULL : &spec_card_end))
+                ok = false;
+        }
+        if (ok && w->want_spectral) {
+            int s_off = (w->want_tag_spectral_card || w->want_tag_spectral_card2) ? spec_soul_end : 0;
+            int c_off = (w->want_tag_spectral_card || w->want_tag_spectral_card2) ? spec_card_end : 0;
+            if (!predict_spectral_inner(seed, slen, "spe", 1, w->spectral_pack_size, NULL, hs,
+                                         NULL, w->spectral_card,
+                                         s_off, c_off, NULL, NULL))
+                ok = false;
+        }
+        if (ok && w->want_spectral2) {
+            int s_off = (w->want_tag_spectral_card || w->want_tag_spectral_card2) ? spec_soul_end : 0;
+            int c_off = (w->want_tag_spectral_card || w->want_tag_spectral_card2) ? spec_card_end : 0;
+            if (!predict_spectral_inner(seed, slen, "spe", 1, w->spectral_pack_size, NULL, hs,
+                                         NULL, w->spectral_card2,
+                                         s_off, c_off, NULL, NULL))
                 ok = false;
         }
         if (ok && w->want_wraith_joker) {
@@ -1309,7 +1374,13 @@ const char *greenneedle_search(
     int         joker_pack_size,
     const char *joker_edition,
     const char *tag_joker,
-    const char *erratic_filter
+    const char *erratic_filter,
+    const char *tag_tarot_card,
+    const char *tag_tarot_card2,
+    int         tag_tarot_pack_size,
+    const char *tag_spectral_card,
+    const char *tag_spectral_card2,
+    int         tag_spectral_pack_size
 ) {
     static char result[16];
     result[0] = '\0';
@@ -1348,6 +1419,10 @@ const char *greenneedle_search(
     bool want_joker_card = joker_card && joker_card[0];
     bool want_joker_card2 = joker_card2 && joker_card2[0];
     bool want_tag_joker = tag_joker && tag_joker[0];
+    bool wtt1 = tag_tarot_card && tag_tarot_card[0];
+    bool wtt2 = tag_tarot_card2 && tag_tarot_card2[0];
+    bool wts1 = tag_spectral_card && tag_spectral_card[0];
+    bool wts2 = tag_spectral_card2 && tag_spectral_card2[0];
 
     /* Parse erratic filter: "r0,min0,max0,r1,min1,max1,r2,min2,max2,r3,min3,max3,smin0,smax0,smin1,smax1,smin2,smax2,smin3,smax3" */
     ErraticFilter ef = {
@@ -1471,6 +1546,16 @@ const char *greenneedle_search(
         w->want_joker_card2 = want_joker_card2;
         w->tag_joker       = tag_joker;
         w->want_tag_joker  = want_tag_joker;
+        w->tag_tarot_card  = tag_tarot_card;
+        w->tag_tarot_card2 = tag_tarot_card2;
+        w->tag_tarot_pack_size = tag_tarot_pack_size > 0 ? tag_tarot_pack_size : 5;
+        w->want_tag_tarot_card = wtt1;
+        w->want_tag_tarot_card2 = wtt2;
+        w->tag_spectral_card  = tag_spectral_card;
+        w->tag_spectral_card2 = tag_spectral_card2;
+        w->tag_spectral_pack_size = tag_spectral_pack_size > 0 ? tag_spectral_pack_size : 4;
+        w->want_tag_spectral_card = wts1;
+        w->want_tag_spectral_card2 = wts2;
         w->erratic         = ef;
         w->result[0]       = '\0';
         w->found           = &found_flag;

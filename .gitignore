@@ -5,3 +5,4 @@ native/seed_search_st
 
 # User settings (created at runtime)
 settings.lua
+balatro/

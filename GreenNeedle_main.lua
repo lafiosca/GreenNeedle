@@ -6,7 +6,7 @@ local lovely = require("lovely")
 local nativefs = require("nativefs")
 
 GreenNeedle.INITIALIZED = true
-GreenNeedle.VER = "0.5.2"
+GreenNeedle.VER = "0.5.3"
 
 -- Local alias for the global formatter
 local function format_count(n)

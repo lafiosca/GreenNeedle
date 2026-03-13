@@ -148,7 +148,7 @@ GreenNeedle.SearchSpectralCardList = {
 	["Trance"]      = "c_trance",
 	["Medium"]      = "c_medium",
 	["Cryptid"]     = "c_cryptid",
-	["The Soul"]    = "c_soul",
+	["Soul"]    = "c_soul",
 	["Black Hole"]  = "c_black_hole",
 }
 
@@ -176,7 +176,7 @@ GreenNeedle.SearchTarotCardList = {
 	["The Sun"]          = "c_sun",
 	["Judgement"]        = "c_judgement",
 	["The World"]        = "c_world",
-	["The Soul"]         = "c_soul",
+	["Soul"]         = "c_soul",
 }
 
 GreenNeedle.SearchPlanetCardList = {
@@ -241,9 +241,9 @@ local searchPackKeys = {"Any", "Normal Arcana", "Jumbo Arcana", "Mega Arcana", "
 GreenNeedle.searchVoucherKeys = {"Any", "Blank", "Clearance Sale", "Crystal Ball", "Director's Cut", "Grabber", "Hieroglyph", "Hone", "Magic Trick", "Overstock", "Paint Brush", "Planet Merchant", "Reroll Surplus", "Seed Money", "Tarot Merchant", "Telescope", "Wasteful"}
 local searchVoucherKeys = GreenNeedle.searchVoucherKeys
 local searchLegendaryKeys = {"Any", "Canio", "Triboulet", "Yorick", "Chicot", "Perkeo"}
-GreenNeedle.searchSpectralCardKeys = {"Any", "Ankh", "Aura", "Black Hole", "Cryptid", "Deja Vu", "Ectoplasm", "Familiar", "Grim", "Hex", "Immolate", "Incantation", "Medium", "Ouija", "Sigil", "Talisman", "The Soul", "Trance", "Wraith"}
+GreenNeedle.searchSpectralCardKeys = {"Any", "Ankh", "Aura", "Black Hole", "Cryptid", "Deja Vu", "Ectoplasm", "Familiar", "Grim", "Hex", "Immolate", "Incantation", "Medium", "Ouija", "Sigil", "Talisman", "Soul", "Trance", "Wraith"}
 local searchSpectralCardKeys = GreenNeedle.searchSpectralCardKeys
-GreenNeedle.searchTarotCardKeys = {"Any", "The Chariot", "Death", "The Devil", "The Emperor", "The Empress", "The Fool", "The Hanged Man", "The Hermit", "The High Priestess", "Judgement", "Justice", "The Lovers", "The Magician", "The Moon", "The Soul", "The Star", "Strength", "The Sun", "Temperance", "The Tower", "Wheel of Fortune", "The World"}
+GreenNeedle.searchTarotCardKeys = {"Any", "The Chariot", "Death", "The Devil", "The Emperor", "The Empress", "The Fool", "The Hanged Man", "The Hermit", "The High Priestess", "Judgement", "Justice", "The Lovers", "The Magician", "The Moon", "Soul", "The Star", "Strength", "The Sun", "Temperance", "The Tower", "Wheel of Fortune", "The World"}
 local searchTarotCardKeys = GreenNeedle.searchTarotCardKeys
 GreenNeedle.searchPlanetCardKeys = {"Any", "Black Hole", "Ceres", "Earth", "Eris", "Jupiter", "Mars", "Mercury", "Neptune", "Planet X", "Pluto", "Saturn", "Uranus", "Venus"}
 local searchPlanetCardKeys = GreenNeedle.searchPlanetCardKeys
@@ -619,7 +619,7 @@ function GreenNeedle.tag_shop_panel()
 				-- Compute search estimate for display
 				local est = GreenNeedle.estimate_search_seeds()
 
-				-- Check if The Soul is selected in any card slot
+				-- Check if Soul is selected in any card slot
 				local has_soul_selected = (s.searchTagCard1 or "") == "c_soul"
 					or (s.searchTagCard2 or "") == "c_soul"
 					or (s.searchPackCard1 or "") == "c_soul"

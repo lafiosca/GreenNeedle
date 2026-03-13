@@ -8,11 +8,11 @@ Requires the [Lovely](https://github.com/ethangreen-dev/lovely-injector) mod loa
 
 ![Judgement joker and edition filtering](screenshots/erosion-settings.png)
 
-*Charm Tag with The Soul + Temperance, Mega Spectral with Ankh, Director's Cut voucher, and Chicot legendary:*
+*Charm Tag with Soul + Temperance, Mega Spectral with Ankh, Director's Cut voucher, and Chicot legendary:*
 
 ![Shop pack cards, vouchers, and legendary filtering](screenshots/double-chicot-settings.png)
 
-*The Soul + Temperance in the tag pack, Mega Spectral with Immolate, Telescope + Observatory vouchers, and Perkeo legendary — estimate in yellow at ~1 in 10.3B:*
+*Soul + Temperance in the tag pack, Mega Spectral with Immolate, Telescope + Observatory vouchers, and Perkeo legendary — estimate in yellow at ~1 in 10.3B:*
 
 ![Combined filters with colour-coded estimate](screenshots/perkeo-observatory-settings.png)
 
@@ -57,7 +57,7 @@ Requires the [Lovely](https://github.com/ethangreen-dev/lovely-injector) mod loa
   - **Erratic deck filtering** — on a separate tab, filter the randomized deck composition by suit counts and rank counts (e.g. at least 12 copies of the 2 rank), with independent erratic and combined seed estimates
   - **Voucher Ante 1** (Telescope, Crystal Ball, etc.)
   - **Voucher Ante 2** (dynamically filtered based on Ante 1 selection)
-  - **Legendary joker** (Canio, Perkeo, etc.) — appears when The Soul is selected in any card slot
+  - **Legendary joker** (Canio, Perkeo, etc.) — appears when Soul is selected in any card slot
 - **Estimated seed count** shown in the settings panel and search overlay so you know roughly how many seeds to expect before finding a match
 - **Cumulative likelihood** percentage displayed during search
 - Native C search engine for fast multi-threaded searching (~millions of seeds/sec)
