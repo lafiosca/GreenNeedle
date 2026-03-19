@@ -14,9 +14,12 @@ if [ -z "$VERSION" ]; then
 fi
 
 OUTFILE="/tmp/GreenNeedle-v${VERSION}.zip"
+STAGING="/tmp/GreenNeedle"
 rm -f "$OUTFILE"
+rm -rf "$STAGING"
+mkdir "$STAGING"
 
-zip "$OUTFILE" \
+cp \
     GreenNeedle.lua \
     GreenNeedle_main.lua \
     GreenNeedle_search.lua \
@@ -25,6 +28,10 @@ zip "$OUTFILE" \
     nativefs.lua \
     lovely.toml \
     greenneedle.dylib \
-    greenneedle.dll
+    greenneedle.dll \
+    "$STAGING/"
+
+(cd /tmp && zip -r "$OUTFILE" GreenNeedle/)
+rm -rf "$STAGING"
 
 echo "Created $OUTFILE"
