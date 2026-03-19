@@ -68,14 +68,33 @@ GreenNeedle.SETTINGS = {
 function initGreenNeedle()
 	local lovely = require("lovely")
 	local nativefs = require("nativefs")
-	assert(load(nativefs.read(lovely.mod_dir .. "/GreenNeedle/GreenNeedle_main.lua")))()
-	assert(load(nativefs.read(lovely.mod_dir .. "/GreenNeedle/GreenNeedle_UI.lua")))()
-	assert(load(nativefs.read(lovely.mod_dir .. "/GreenNeedle/GreenNeedle_keyhandler.lua")))()
-	assert(load(nativefs.read(lovely.mod_dir .. "/GreenNeedle/GreenNeedle_search.lua")))()
+
+	-- Locate mod folder: try canonical name first, then scan for it
+	local mod_dir = lovely.mod_dir .. "/GreenNeedle"
+	if not nativefs.getInfo(mod_dir .. "/GreenNeedle_main.lua") then
+		mod_dir = nil
+		local items = nativefs.getDirectoryItems(lovely.mod_dir)
+		if items then
+			for _, name in ipairs(items) do
+				local path = lovely.mod_dir .. "/" .. name
+				if nativefs.getInfo(path .. "/GreenNeedle_main.lua") then
+					mod_dir = path
+					break
+				end
+			end
+		end
+	end
+	assert(mod_dir, "GreenNeedle: could not find mod folder. Rename the mod folder to 'GreenNeedle' inside " .. lovely.mod_dir)
+	GreenNeedle.MOD_DIR = mod_dir
+
+	assert(load(nativefs.read(mod_dir .. "/GreenNeedle_main.lua")))()
+	assert(load(nativefs.read(mod_dir .. "/GreenNeedle_UI.lua")))()
+	assert(load(nativefs.read(mod_dir .. "/GreenNeedle_keyhandler.lua")))()
+	assert(load(nativefs.read(mod_dir .. "/GreenNeedle_search.lua")))()
 
 	-- Load saved settings (overwrite defaults)
-	if nativefs.getInfo(lovely.mod_dir .. "/GreenNeedle/settings.lua") then
-		local saved = STR_UNPACK(nativefs.read(lovely.mod_dir .. "/GreenNeedle/settings.lua"))
+	if nativefs.getInfo(mod_dir .. "/settings.lua") then
+		local saved = STR_UNPACK(nativefs.read(mod_dir .. "/settings.lua"))
 		if saved then
 			-- Merge saved into defaults so new keys get their defaults
 			for k, v in pairs(saved) do

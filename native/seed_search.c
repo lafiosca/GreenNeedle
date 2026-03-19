@@ -72,7 +72,23 @@ int main(int argc, char **argv) {
     fprintf(stderr, "  tag=%s pack=%s voucher=%s legendary=%s spectral=%s tarot=%s voucher2=%s wraith=%s edition=%s\n",
             tag, pack, voucher, legendary, spectral, tarot, voucher2, wraith_joker, wraith_edition);
 
-    const char *result = greenneedle_search(start_seed, count, tag, pack, voucher, legendary, spectral, 0, tarot, tarot_append, tarot_pack_size, voucher2, tarot2, spectral2, wraith_joker, 0xFFFFF, wraith_edition, spectral_pack_size, "", "", "", "", "pl1", 5, "", "", "buf", 4, "", "", "");
+    SearchArgs args = {
+        .start_seed = start_seed, .max_seeds = count,
+        .tag = tag, .pack_list = pack, .voucher = voucher, .legendary = legendary,
+        .spectral_card = spectral, .tag_avail_mask = 0,
+        .tarot_card = tarot, .tarot_key_append = tarot_append, .tarot_pack_size = tarot_pack_size,
+        .voucher2 = voucher2, .tarot_card2 = tarot2, .spectral_card2 = spectral2,
+        .wraith_joker = wraith_joker, .rare_joker_mask = 0xFFFFF, .wraith_edition = wraith_edition,
+        .spectral_pack_size = spectral_pack_size,
+        .judgement_joker = "", .judgement_edition = "",
+        .shop_judgement_joker = "", .shop_judgement_edition = "",
+        .planet_card = "", .planet_card2 = "", .planet_key_append = "pl1", .planet_pack_size = 5,
+        .joker_card = "", .joker_card2 = "", .joker_key_append = "buf", .joker_pack_size = 4,
+        .joker_edition = "", .tag_joker = "", .erratic_filter = "",
+        .tag_tarot_card = "", .tag_tarot_card2 = "", .tag_tarot_pack_size = 5,
+        .tag_spectral_card = "", .tag_spectral_card2 = "", .tag_spectral_pack_size = 4,
+    };
+    const char *result = greenneedle_search(&args);
 
     if (result && result[0]) {
         printf("%s\n", result);

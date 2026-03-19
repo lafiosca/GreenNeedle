@@ -6,7 +6,7 @@ local lovely = require("lovely")
 local nativefs = require("nativefs")
 
 GreenNeedle.INITIALIZED = true
-GreenNeedle.VER = "0.5.3"
+GreenNeedle.VER = "0.6.0"
 
 -- Local alias for the global formatter
 local function format_count(n)
@@ -43,6 +43,8 @@ function GreenNeedle.update(dt)
 		if GreenNeedle.AUTOREROLL.autoRerollFrames == 0 then
 			GreenNeedle.AUTOREROLL.seedsSearched = 0
 			GreenNeedle.AUTOREROLL.searchStartTime = os.time()
+			GreenNeedle.AUTOREROLL._logged_params = false
+			GreenNeedle.AUTOREROLL._logged_native = false
 			if G.GAME.starting_params.erratic_suits_and_ranks then
 				GreenNeedle.AUTOREROLL.searchEstimate = GreenNeedle.estimate_combined_seeds()
 			else

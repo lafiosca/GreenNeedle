@@ -681,10 +681,12 @@ static const char *predict_wraith_edition_h(const char *seed, int slen, int ante
  *      >0.95 → Rare(3), >0.7 → Uncommon(2), else Common(1)
  *   2. Joker picked from rarity pool with key "Joker{R}jud{ante}"
  * Assumes all jokers unlocked (no availability mask). */
-static const char *predict_judgement_joker_h(const char *seed, int slen, int ante, double hs) {
+/* advance: which pseudoseed advance to use (1 = first Judgement, 2 = second, etc.) */
+static const char *predict_judgement_joker_h(const char *seed, int slen, int ante, double hs, int advance) {
     if (hs < 0) hs = pseudohash(seed, slen);
 
-    /* Step 1: determine rarity via pseudorandom('rarity' .. ante .. 'jud') */
+    /* Step 1: determine rarity via pseudorandom('rarity' .. ante .. 'jud')
+     * pseudorandom is stateless — same result every time for same seed. */
     char rarity_key[32];
     int rklen = snprintf(rarity_key, sizeof(rarity_key), "rarity%djud", ante);
     double rarity_pseed = gn_pseudoseed_h(rarity_key, rklen, seed, slen, hs);
@@ -702,10 +704,11 @@ static const char *predict_judgement_joker_h(const char *seed, int slen, int ant
         pool = COMMON_JOKER_POOL; pool_size = COMMON_JOKER_POOL_SIZE; rarity = 1;
     }
 
-    /* Step 2: pick joker from rarity pool */
+    /* Step 2: pick joker from rarity pool using pseudoseed (stateful).
+     * First Judgement uses advance 1, second uses advance 2, etc. */
     char pool_key[32];
     int pklen = snprintf(pool_key, sizeof(pool_key), "Joker%djud%d", rarity, ante);
-    double pseed = gn_pseudoseed_h(pool_key, pklen, seed, slen, hs);
+    double pseed = gn_pseudoseed_advance_h(pool_key, pklen, seed, slen, advance, hs);
     LRandom rng = randomseed(pseed);
     uint64_t idx = l_randint(&rng, 1, (uint64_t)pool_size);
 
@@ -715,8 +718,8 @@ static const char *predict_judgement_joker_h(const char *seed, int slen, int ant
         while (pool[idx - 1] == NULL && resample < 100) {
             resample++;
             char reskey[64];
-            int rklen = snprintf(reskey, sizeof(reskey), "Joker%djud%d_resample%d", rarity, ante, resample);
-            double rpseed = gn_pseudoseed_h(reskey, rklen, seed, slen, hs);
+            int rklen2 = snprintf(reskey, sizeof(reskey), "Joker%djud%d_resample%d", rarity, ante, resample);
+            double rpseed = gn_pseudoseed_h(reskey, rklen2, seed, slen, hs);
             rng = randomseed(rpseed);
             idx = l_randint(&rng, 1, (uint64_t)pool_size);
         }
@@ -768,11 +771,11 @@ static const char *predict_tag_joker_h(const char *seed, int slen, int ante,
 
 /* Predict the edition of the joker Judgement creates.
  * Uses pseudoseed key "edijud" + ante with poll_edition base rates. */
-static const char *predict_judgement_edition_h(const char *seed, int slen, int ante, double hs) {
+static const char *predict_judgement_edition_h(const char *seed, int slen, int ante, double hs, int advance) {
     if (hs < 0) hs = pseudohash(seed, slen);
     char key[32];
     int klen = snprintf(key, sizeof(key), "edijud%d", ante);
-    double pseed = gn_pseudoseed_h(key, klen, seed, slen, hs);
+    double pseed = gn_pseudoseed_advance_h(key, klen, seed, slen, advance, hs);
     LRandom rng = randomseed(pseed);
     double poll = l_random(&rng);
     if (poll > 0.997) return "e_negative";
@@ -1123,6 +1126,8 @@ typedef struct {
     const char    *wraith_edition;
     const char    *judgement_joker;
     const char    *judgement_edition;
+    const char    *shop_judgement_joker;
+    const char    *shop_judgement_edition;
     const char    *planet_card;
     const char    *planet_card2;
     const char    *planet_key_append;
@@ -1139,6 +1144,7 @@ typedef struct {
     bool           want_spectral2, want_voucher2;
     bool           want_wraith_joker, want_wraith_edition;
     bool           want_judgement_joker, want_judgement_edition;
+    bool           want_shop_judgement_joker, want_shop_judgement_edition;
     bool           want_planet_card, want_planet_card2;
     bool           want_joker_card, want_joker_card2;
     bool           want_tag_joker;
@@ -1276,11 +1282,22 @@ static void *search_worker(void *arg) {
                 ok = false;
         }
         if (ok && w->want_judgement_joker) {
-            if (strcmp(predict_judgement_joker_h(seed, slen, 1, hs), w->judgement_joker) != 0)
+            if (strcmp(predict_judgement_joker_h(seed, slen, 1, hs, 1), w->judgement_joker) != 0)
                 ok = false;
         }
         if (ok && w->want_judgement_edition) {
-            if (strcmp(predict_judgement_edition_h(seed, slen, 1, hs), w->judgement_edition) != 0)
+            if (strcmp(predict_judgement_edition_h(seed, slen, 1, hs, 1), w->judgement_edition) != 0)
+                ok = false;
+        }
+        /* Shop Judgement: second advance of the same pseudoseed key */
+        if (ok && w->want_shop_judgement_joker) {
+            int adv = (w->want_judgement_joker || w->want_judgement_edition) ? 2 : 1;
+            if (strcmp(predict_judgement_joker_h(seed, slen, 1, hs, adv), w->shop_judgement_joker) != 0)
+                ok = false;
+        }
+        if (ok && w->want_shop_judgement_edition) {
+            int adv = (w->want_judgement_joker || w->want_judgement_edition) ? 2 : 1;
+            if (strcmp(predict_judgement_edition_h(seed, slen, 1, hs, adv), w->shop_judgement_edition) != 0)
                 ok = false;
         }
         if (ok && w->want_tag_joker) {
@@ -1340,50 +1357,95 @@ static void *search_worker(void *arg) {
 #endif
 }
 
+typedef struct {
+    const char *start_seed;
+    int         max_seeds;
+    const char *tag;
+    const char *pack_list;
+    const char *voucher;
+    const char *legendary;
+    const char *spectral_card;
+    uint32_t    tag_avail_mask;
+    const char *tarot_card;
+    const char *tarot_key_append;
+    int         tarot_pack_size;
+    const char *voucher2;
+    const char *tarot_card2;
+    const char *spectral_card2;
+    const char *wraith_joker;
+    uint32_t    rare_joker_mask;
+    const char *wraith_edition;
+    int         spectral_pack_size;
+    const char *judgement_joker;
+    const char *judgement_edition;
+    const char *shop_judgement_joker;
+    const char *shop_judgement_edition;
+    const char *planet_card;
+    const char *planet_card2;
+    const char *planet_key_append;
+    int         planet_pack_size;
+    const char *joker_card;
+    const char *joker_card2;
+    const char *joker_key_append;
+    int         joker_pack_size;
+    const char *joker_edition;
+    const char *tag_joker;
+    const char *erratic_filter;
+    const char *tag_tarot_card;
+    const char *tag_tarot_card2;
+    int         tag_tarot_pack_size;
+    const char *tag_spectral_card;
+    const char *tag_spectral_card2;
+    int         tag_spectral_pack_size;
+} SearchArgs;
+
 #ifdef _WIN32
 __declspec(dllexport)
 #endif
-const char *greenneedle_search(
-    const char *start_seed,
-    int         max_seeds,
-    const char *tag,
-    const char *pack_list,
-    const char *voucher,
-    const char *legendary,
-    const char *spectral_card,
-    uint32_t    tag_avail_mask,
-    const char *tarot_card,
-    const char *tarot_key_append,
-    int         tarot_pack_size,
-    const char *voucher2,
-    const char *tarot_card2,
-    const char *spectral_card2,
-    const char *wraith_joker,
-    uint32_t    rare_joker_mask,
-    const char *wraith_edition,
-    int         spectral_pack_size,
-    const char *judgement_joker,
-    const char *judgement_edition,
-    const char *planet_card,
-    const char *planet_card2,
-    const char *planet_key_append,
-    int         planet_pack_size,
-    const char *joker_card,
-    const char *joker_card2,
-    const char *joker_key_append,
-    int         joker_pack_size,
-    const char *joker_edition,
-    const char *tag_joker,
-    const char *erratic_filter,
-    const char *tag_tarot_card,
-    const char *tag_tarot_card2,
-    int         tag_tarot_pack_size,
-    const char *tag_spectral_card,
-    const char *tag_spectral_card2,
-    int         tag_spectral_pack_size
-) {
+const char *greenneedle_search(const SearchArgs *a) {
     static char result[16];
     result[0] = '\0';
+
+    /* Unpack struct fields for readability */
+    const char *start_seed       = a->start_seed;
+    int         max_seeds        = a->max_seeds;
+    const char *tag              = a->tag;
+    const char *pack_list        = a->pack_list;
+    const char *voucher          = a->voucher;
+    const char *legendary        = a->legendary;
+    const char *spectral_card    = a->spectral_card;
+    uint32_t    tag_avail_mask   = a->tag_avail_mask;
+    const char *tarot_card       = a->tarot_card;
+    const char *tarot_key_append = a->tarot_key_append;
+    int         tarot_pack_size  = a->tarot_pack_size;
+    const char *voucher2         = a->voucher2;
+    const char *tarot_card2      = a->tarot_card2;
+    const char *spectral_card2   = a->spectral_card2;
+    const char *wraith_joker     = a->wraith_joker;
+    uint32_t    rare_joker_mask  = a->rare_joker_mask;
+    const char *wraith_edition   = a->wraith_edition;
+    int         spectral_pack_size = a->spectral_pack_size;
+    const char *judgement_joker  = a->judgement_joker;
+    const char *judgement_edition = a->judgement_edition;
+    const char *shop_judgement_joker = a->shop_judgement_joker;
+    const char *shop_judgement_edition = a->shop_judgement_edition;
+    const char *planet_card      = a->planet_card;
+    const char *planet_card2     = a->planet_card2;
+    const char *planet_key_append = a->planet_key_append;
+    int         planet_pack_size = a->planet_pack_size;
+    const char *joker_card       = a->joker_card;
+    const char *joker_card2      = a->joker_card2;
+    const char *joker_key_append = a->joker_key_append;
+    int         joker_pack_size  = a->joker_pack_size;
+    const char *joker_edition    = a->joker_edition;
+    const char *tag_joker        = a->tag_joker;
+    const char *erratic_filter   = a->erratic_filter;
+    const char *tag_tarot_card   = a->tag_tarot_card;
+    const char *tag_tarot_card2  = a->tag_tarot_card2;
+    int         tag_tarot_pack_size = a->tag_tarot_pack_size;
+    const char *tag_spectral_card   = a->tag_spectral_card;
+    const char *tag_spectral_card2  = a->tag_spectral_card2;
+    int         tag_spectral_pack_size = a->tag_spectral_pack_size;
 
     /* Parse pack_list into individual keys */
     char pack_keys[32][64];
@@ -1414,6 +1476,8 @@ const char *greenneedle_search(
     bool want_wraith_edition = wraith_edition && wraith_edition[0];
     bool want_judgement_joker = judgement_joker && judgement_joker[0];
     bool want_judgement_edition = judgement_edition && judgement_edition[0];
+    bool want_shop_judgement_joker = shop_judgement_joker && shop_judgement_joker[0];
+    bool want_shop_judgement_edition = shop_judgement_edition && shop_judgement_edition[0];
     bool want_planet_card = planet_card && planet_card[0];
     bool want_planet_card2 = planet_card2 && planet_card2[0];
     bool want_joker_card = joker_card && joker_card[0];
@@ -1424,7 +1488,7 @@ const char *greenneedle_search(
     bool wts1 = tag_spectral_card && tag_spectral_card[0];
     bool wts2 = tag_spectral_card2 && tag_spectral_card2[0];
 
-    /* Parse erratic filter: "r0,min0,max0,r1,min1,max1,r2,min2,max2,r3,min3,max3,smin0,smax0,smin1,smax1,smin2,smax2,smin3,smax3" */
+    /* Parse erratic filter */
     ErraticFilter ef = {
         .rank_idx = {-1, -1, -1, -1},
         .rank_min = {0, 0, 0, 0}, .rank_max = {52, 52, 52, 52},
@@ -1531,6 +1595,10 @@ const char *greenneedle_search(
         w->judgement_edition = judgement_edition;
         w->want_judgement_joker = want_judgement_joker;
         w->want_judgement_edition = want_judgement_edition;
+        w->shop_judgement_joker = shop_judgement_joker;
+        w->shop_judgement_edition = shop_judgement_edition;
+        w->want_shop_judgement_joker = want_shop_judgement_joker;
+        w->want_shop_judgement_edition = want_shop_judgement_edition;
         w->planet_card     = planet_card;
         w->planet_card2    = planet_card2;
         w->planet_key_append = planet_key_append && planet_key_append[0] ? planet_key_append : "pl1";
