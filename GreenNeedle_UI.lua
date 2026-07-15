@@ -985,30 +985,65 @@ function GreenNeedle.update_estimate_text()
 		GreenNeedle.estimate_combined_seeds())
 end
 
+-- Start Search button callback: close the settings overlay and begin searching
+-- (same as pressing ctrl+a; needed on touch devices with no keyboard)
+G.FUNCS.gn_start_search = function(e)
+	G.FUNCS.exit_overlay_menu()
+	GreenNeedle.AUTOREROLL.autoRerollActive = true
+end
+
 -- Main menu button callback: open Green Needle settings as an overlay
 G.FUNCS.greenneedle_config = function(e)
 	G.SETTINGS.paused = true
 	GreenNeedle._suppress_pop_in = true
 	G.FUNCS.overlay_menu({
 		definition = create_UIBox_generic_options({
-			back_func = "options",
-			contents = {create_tabs({
-				tabs = {
-					{
-						label = "Tag & Shop",
-						chosen = true,
-						tab_definition_function = GreenNeedle.tag_shop_panel,
+			no_back = true,
+			contents = {
+				create_tabs({
+					tabs = {
+						{
+							label = "Tag & Shop",
+							chosen = true,
+							tab_definition_function = GreenNeedle.tag_shop_panel,
+						},
+						{
+							label = "Erratic",
+							tab_definition_function = GreenNeedle.erratic_panel,
+						},
 					},
-					{
-						label = "Erratic",
-						tab_definition_function = GreenNeedle.erratic_panel,
-					},
-				},
-				scale = 1.3,
-				tab_h = 7.05,
-				tab_alignment = "tm",
-				snap_to_nav = true,
-			})},
+					scale = 1.3,
+					tab_h = 7.05,
+					tab_alignment = "tm",
+					snap_to_nav = true,
+				}),
+				-- Bottom row: Back (left half) and Start Search (right half),
+				-- replacing the full-width back button from create_UIBox_generic_options
+				{n=G.UIT.R, config={align = "cm", padding = 0.05}, nodes={
+					UIBox_button({
+						col = true,
+						button = "options",
+						label = {localize('b_back')},
+						colour = G.C.ORANGE,
+						minw = 6.9,
+						minh = 1,
+						shadow = true,
+						id = "overlay_menu_back_button",
+						focus_args = {nav = 'wide', button = 'b', set_button_pip = true},
+					}),
+					{n=G.UIT.C, config={align = "cm", minw = 0.2}, nodes={}},
+					UIBox_button({
+						col = true,
+						button = "gn_start_search",
+						label = {"Start Search"},
+						colour = darken(G.C.GREEN, 0.25),
+						minw = 6.9,
+						minh = 1,
+						shadow = true,
+						focus_args = {nav = 'wide'},
+					}),
+				}},
+			},
 		}),
 		config = {offset = {x = 0, y = 0}},
 	})

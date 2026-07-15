@@ -23,3 +23,14 @@ end
 function GreenNeedle.key_release_update(key)
 	if isCtrl(key) then GreenNeedle.ctrlDown = false end
 end
+
+-- Called on left cursor press (mouse click or touch). Cancels an active
+-- search, mirroring the ctrl+<key> toggle for devices with no keyboard.
+-- Returns true to swallow the press so it doesn't hit UI underneath.
+function GreenNeedle.cursor_press_update()
+	if GreenNeedle.AUTOREROLL and GreenNeedle.AUTOREROLL.autoRerollActive then
+		GreenNeedle.AUTOREROLL.autoRerollActive = false
+		return true
+	end
+	return false
+end

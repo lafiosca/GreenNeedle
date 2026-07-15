@@ -1,5 +1,5 @@
 [manifest]
-version = "0.6.0"
+version = "0.7.0"
 dump_lua = true
 priority = 0
 
@@ -30,6 +30,15 @@ target = "engine/controller.lua"
 pattern = "if self.text_input_hook then"
 position = "before"
 payload = "GreenNeedle.key_press_update(key)"
+match_indent = true
+overwrite = false
+
+[[patches]] # Inject cursor press handler (tap/click cancels an active search)
+[patches.pattern]
+target = "engine/controller.lua"
+pattern = "self.L_cursor_queue = {x = x, y = y}"
+position = "before"
+payload = "if GreenNeedle.cursor_press_update and GreenNeedle.cursor_press_update() then return end"
 match_indent = true
 overwrite = false
 

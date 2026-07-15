@@ -6,7 +6,7 @@ local lovely = require("lovely")
 local nativefs = require("nativefs")
 
 GreenNeedle.INITIALIZED = true
-GreenNeedle.VER = "0.6.0"
+GreenNeedle.VER = "0.7.0"
 
 -- Local alias for the global formatter
 local function format_count(n)
@@ -35,6 +35,10 @@ function GreenNeedle.update(dt)
 		if GreenNeedle.AUTOREROLL.timerText then
 			GreenNeedle.remove_attention_text(GreenNeedle.AUTOREROLL.timerText)
 			GreenNeedle.AUTOREROLL.timerText = nil
+		end
+		if GreenNeedle.AUTOREROLL.hintText then
+			GreenNeedle.remove_attention_text(GreenNeedle.AUTOREROLL.hintText)
+			GreenNeedle.AUTOREROLL.hintText = nil
 		end
 	end
 	if GreenNeedle.AUTOREROLL.autoRerollActive then
@@ -74,6 +78,15 @@ function GreenNeedle.update(dt)
 				colour = {0.8, 0.8, 0.8, 1},
 				emboss = 0.05,
 			})
+			GreenNeedle.AUTOREROLL.hintText = GreenNeedle.attention_text({
+				scale = 0.45,
+				text = "Tap or click to cancel",
+				align = 'cm',
+				offset = {x = 0, y = -2.9},
+				major = major,
+				colour = {0.7, 0.7, 0.7, 1},
+				emboss = 0.05,
+			})
 			GreenNeedle.AUTOREROLL.autoRerollFrames = 1
 			return -- let UI render before starting search
 		end
@@ -94,6 +107,10 @@ function GreenNeedle.update(dt)
 				if GreenNeedle.AUTOREROLL.timerText then
 					GreenNeedle.remove_attention_text(GreenNeedle.AUTOREROLL.timerText)
 					GreenNeedle.AUTOREROLL.timerText = nil
+				end
+				if GreenNeedle.AUTOREROLL.hintText then
+					GreenNeedle.remove_attention_text(GreenNeedle.AUTOREROLL.hintText)
+					GreenNeedle.AUTOREROLL.hintText = nil
 				end
 				return
 			end

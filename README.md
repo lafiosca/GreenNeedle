@@ -100,9 +100,11 @@ If neither option appeals to you, the mod still works without the native library
 
 1. Click the **Green Needle** button in the main menu (or pause menu)
 2. Configure your search filters (any combination)
-3. Start or be in a run, then press **Ctrl+A** to start searching
-4. Press **Ctrl+A** again to stop the search
+3. Start or be in a run, then click **Start Search** (or press **Ctrl+A**) to start searching
+4. Tap/click anywhere (or press **Ctrl+A**) to stop the search
 5. When a matching seed is found, a new run starts automatically with that seed
+
+No keyboard is needed — the **Start Search** button and tap-to-cancel make the mod fully usable on touch devices.
 
 ### Seeds per Frame
 
