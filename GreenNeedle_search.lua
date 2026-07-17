@@ -2118,6 +2118,8 @@ function GreenNeedle.attention_text(args)
       blockable = false,
       blocking = false,
       func = function()
+          -- Skip creation if a teardown already ran (rapid start/stop)
+          if args.cancelled then return true end
           args.AT = UIBox{
             T = {args.pos.x,args.pos.y,0,0},
             definition =
@@ -2171,23 +2173,26 @@ function GreenNeedle.remove_attention_text(args)
         blockable = false,
         blocking = false,
         func = function()
+          -- The creation event may not have run yet (its queue can be flushed
+          -- by a run restart when a seed is found instantly). Flag it
+          -- cancelled so it can't create an orphaned overlay later. (#7)
+          if not args.AT then
+            args.cancelled = true
+            return true
+          end
           if not args.start_time then
             args.start_time = G.TIMERS.TOTAL
-			if args.text and type(args.text.pop_out) == "function" then
-	            args.text:pop_out(3)
-			end
-			else
+            args.text:pop_out(3)
+          else
             args.fade = math.max(0, 1 - 3*(G.TIMERS.TOTAL - args.start_time))
             if args.cover_colour then args.cover_colour[4] = math.min(args.cover_colour[4], 2*args.fade) end
             if args.cover_colour_l then args.cover_colour_l[4] = math.min(args.cover_colour_l[4], args.fade) end
             if args.cover_colour_d then args.cover_colour_d[4] = math.min(args.cover_colour_d[4], args.fade) end
             if args.backdrop_colour then args.backdrop_colour[4] = math.min(args.backdrop_colour[4], args.fade) end
             args.colour[4] = math.min(args.colour[4], args.fade)
-			if args.fade <= 0 then
-        	    if args.AT and type(args.AT.remove) == "function" then
-        	      args.AT:remove()
-				end
-        		return true
+            if args.fade <= 0 then
+              args.AT:remove()
+              return true
             end
           end
         end
