@@ -2173,17 +2173,21 @@ function GreenNeedle.remove_attention_text(args)
         func = function()
           if not args.start_time then
             args.start_time = G.TIMERS.TOTAL
-            args.text:pop_out(3)
-          else
+			if args.text and type(args.text.pop_out) == "function" then
+	            args.text:pop_out(3)
+			end
+			else
             args.fade = math.max(0, 1 - 3*(G.TIMERS.TOTAL - args.start_time))
             if args.cover_colour then args.cover_colour[4] = math.min(args.cover_colour[4], 2*args.fade) end
             if args.cover_colour_l then args.cover_colour_l[4] = math.min(args.cover_colour_l[4], args.fade) end
             if args.cover_colour_d then args.cover_colour_d[4] = math.min(args.cover_colour_d[4], args.fade) end
             if args.backdrop_colour then args.backdrop_colour[4] = math.min(args.backdrop_colour[4], args.fade) end
             args.colour[4] = math.min(args.colour[4], args.fade)
-            if args.fade <= 0 then
-              args.AT:remove()
-              return true
+			if args.fade <= 0 then
+        	    if args.AT and type(args.AT.remove) == "function" then
+        	      args.AT:remove()
+				end
+        		return true
             end
           end
         end
