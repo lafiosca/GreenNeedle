@@ -666,11 +666,18 @@ function GreenNeedle.tag_shop_panel()
 						opt_callback = "gn_change_seeds_per_frame",
 						current_option = s.seedsPerFrameID or 1,
 					})
+				local native_active = GreenNeedle.native and not GreenNeedle.SETTINGS.force_lua_search
+				local native_text = "Native search: unavailable (Lua fallback)"
+				if native_active then
+					native_text = "Native search: enabled"
+				elseif GreenNeedle.native then
+					native_text = "Native search: disabled by settings (Lua fallback)"
+				end
 				col3_nodes[#col3_nodes + 1] = {n=G.UIT.R, config={align="cm"}, nodes={
 						{n=G.UIT.T, config={
-							text = GreenNeedle.native and "Native search: enabled" or "Native search: unavailable (Lua fallback)",
+							text = native_text,
 							scale = 0.3,
-							colour = GreenNeedle.native and G.C.GREEN or G.C.RED,
+							colour = native_active and G.C.GREEN or G.C.RED,
 						}},
 					}}
 				GreenNeedle._estimateDisplayText = GreenNeedle._estimateDisplayText or {}

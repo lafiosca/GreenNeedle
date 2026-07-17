@@ -794,16 +794,12 @@ function GreenNeedle.check_spectral_card(seed, key_append, ante, pack_size, extr
 	local card_key = "Spectral" .. key_append .. ante
 
 	local pool = {}
+	local unavailable = {}
 	for k, v in ipairs(G.P_CENTER_POOLS["Spectral"]) do
 		pool[#pool + 1] = v.key
-	end
-	while #pool < 18 do
-		pool[#pool + 1] = nil
-	end
-
-	local unavailable = {}
-	for i = 1, #pool do
-		unavailable[i] = (pool[i] == nil)
+		-- c_soul and c_black_hole occupy pool slots but are forced UNAVAILABLE by
+		-- get_current_pool (add=false); they only spawn via the soul_ checks above
+		unavailable[#pool] = (v.key == "c_soul" or v.key == "c_black_hole")
 	end
 	if extra_excluded and extra_excluded ~= "" then
 		for i = 1, #pool do
@@ -847,6 +843,9 @@ function GreenNeedle.check_spectral_card(seed, key_append, ante, pack_size, extr
 				idx = math.random(#pool)
 			end
 			if pool[idx] == target_card then return true, soul_advance, card_advance end
+			-- Drawn cards become unavailable for later slots (no duplicates in a
+			-- pack), which affects how later resamples resolve
+			unavailable[idx] = true
 		end
 	end
 	return false, soul_advance, card_advance
@@ -941,7 +940,8 @@ function GreenNeedle.check_joker_card(seed, key_append, ante, pack_size, target_
 
 		local pool = G.P_JOKER_RARITY_POOLS and G.P_JOKER_RARITY_POOLS[rarity]
 		if pool and #pool > 0 then
-			local pool_key = "Joker" .. rarity .. key_append
+			-- get_current_pool appends the ante to the pool key ("Joker3buf1")
+			local pool_key = "Joker" .. rarity .. key_append .. ante
 			pool_advances[pool_key] = (pool_advances[pool_key] or 0) + 1
 			local pseed = GreenNeedle.pseudoseed_advance(pool_key, seed, pool_advances[pool_key])
 			math.randomseed(pseed)
